@@ -30,7 +30,7 @@ window.onload = function() {
     }
 }
 
-var panel = document.getELementById('panel_link');
+var panel = document.getElementById('panel_link');
 
 // Get the <span> element that closes the modal
 var span = document.getElementsByClassName("closebutton")[0];
