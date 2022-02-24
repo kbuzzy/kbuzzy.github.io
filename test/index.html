@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <title>A Practical Guide to Clinical Medicine</title>
+        <meta content="bootstrap">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" type="text/css" href="style.css">
+        <link type="text/css" rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script type="text/javascript" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        <script type="text/javascript" src="script.js" defer></script>
+        <!-- Global site tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=UA-130438889-1"></script>
+        <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'UA-130438889-1');
+        </script>
+    </head>
+    <body>
+        <!--Duck Logo Header-->
+        <div class="container-fluid text-left logo">
+            <img src="duck_logo.png" style="max-width:200px" class="img-fluid logo" alt="UCSD SOM Logo">
+            </img>
+        </div>
+        <!--Top of page button-->
+        <button onclick="topFunction()" id="myBtn" title="Go to top" class="btn-lg"><span class="glyphicon glyphicon-chevron-up"></span></button>
+        <!--Header Text-->
+        <div class="container-fluid text-center">
+            <h1>Weill Cornell Pediatrics Residency</h1>
+            <h4>Pediatris Residency Go-To Information Hub.</h4>
+        </div>
+        <!--Collapsable Table of Contents for Website-->
+        <div class="container btn-primary" data-toggle="collapse" data-target="#exams">
+            <div class="library panel-default">Library<span class="navbar-toggler-icon"></span></div>
+            <div id='exams' class="collapse text-center table-responsive">
+                <table summary="Locations" class="table table-sm">
+                    <tr>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/introduction.htm'">6North</td>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/breast.htm'">RGP</td>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/write.htm'">MSK</td>
+                    </tr>
+                    <tr>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/history.htm'">PICU</td>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/pelvic.htm'">LIC</td>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/oral.htm'">HSS</td>
+                    </tr>
+                    <tr>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/rest.htm'">Queens</td>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/genital.htm'">Queens Clinic</td>
+                        <td class="tg-fia5" onclick="window.location='https://meded.ucsd.edu/clinicalmed/clinic.htm'">Electives</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="container">
+            <h1 class="text-center">6North</h1>
+        </div>
+        <!--Table of Contents for Selected Exam-->
+        <!-- <table class="container-fluid" summary="links" width="90%" border="2" cellspacing="2" cellpadding="2">
+            <tr>
+                <td>
+                    <div align="center"><a href="#Assessment"><b>Visual Acuity</b></a></div>
+                </td>
+                <td>
+                    <div align="center"><a href="#collapse2"><b>Observation &amp; External Anatomy</b></a></div>
+                </td>
+                <td>
+                    <div align="center"><a href="#collapse3"><b>Extra-Ocular Movements</b></a></div>
+                </td>
+                <td>
+                    <div align="center"><a href="#Visual"><b>Visual Fields</b></a></div>
+                </td>
+                <td>
+                    <div align="center"><a href="#Pupillary"><b>Pupil Exam</b></a></div>
+                </td>
+                <td>
+                    <div id="panel_link" align="center"><a href="#collapse6"><b>Using the Ophthalmosocpe</b></a></div>
+                </td>
+                <td>
+                    <div align="center"><a href="#Outer"><b>External Structures</b></a></div>
+                </td>
+                <td>
+                    <div align="center"><a href="eyes.htm#retina"><b>Retinal Exam</b></a></div>
+                </td>
+            </tr>
+        </table> -->
+        <button type="button" onclick="expand()" id="expandBtn" class="btn-lg">Expand All</button>
+        <button type="button" onclick="collapse()" id="collapseBtn" class="btn-lg">Collapse All</button>
+        <!--Collapsable Panels for Selected Exam-->
+        <div class="panel-group">
+            <div class="panel panel-default">
+                <div class="panel-heading" data-toggle="collapse" href="#collapse1">
+                    <h4 class="panel-title">
+                    <a name="#Assessment">Visual Acuity</a>
+                    </h4>
+                </div>
+                <div id="collapse1" class="panel-collapse collapse in">
+                    <div class="panel-body">
+                        <p><b>Assessment of Visual Acuity:</b> The first part of the eye exam is an assessment of acuity. This can be done with either a standard Snellen hanging wall chart read with the patient standing at a distance of 20 feet or a specially designed pocket card (held at 14 inches). Each eye is tested independently (i.e. one is covered while the other is used to read). The patient should be allowed to wear their glasses and the results are referred to as "Best corrected vision." You do not need to assess their ability to read every line on the chart. If they have no complaints, rapidly skip down to the smaller characters. The numbers at the end of the line provide an indication of the patient's acuity compared with normal subjects. The larger the denominator, the worse the acuity. 20/200, for example, means that they can see at 20 feet what a normal individual can at 200 feet (i.e. their vision is pretty lousy). If the patient is unable to read any of the lines, indicative of a big problem if this was a new complaint, a gross estimate of what they are capable of seeing should be determined (e.g. ability to detect light, motion or number of fingers placed in front of them). In general, acuity is only tested when there is a new, specific, visual complaint.</p>
+                        <div class="text-center">
+                            <img src="images/handchart.jpg" class="rounded float-left" style="width:100%;max-width:100px" data-toggle="modal" data-target="#handchart">
+                            <!-- Modal -->
+                            <div class="modal fade" class="rounded float-left" id="handchart" tabindex="-1" role="dialog" aria-labelledby="handchart" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered" role="document">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title text-center" id="handchart">Snellen Chart</h5>
+                                        </div>
+                                        <div class="modal-body">
+                                            <img class="center-block" src="images/handchart.jpg" style="width:100%;max-width:400px">
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <img src="images/snellen.jpg" style="width:100%;max-width:100px" data-toggle="modal" data-target="#snellen">
+                            <!-- Modal -->
+                            <div class="modal fade" id="snellen" tabindex="-1" role="dialog" aria-labelledby="snellen" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered" role="document">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title text-center" id="snellen">Handheld Acuity Card</h5>
+                                        </div>
+                                        <div class="modal-body">
+                                            <img class="center-block" src="images/snellen.jpg" style="width:100%;max-width:400px">
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p><b>Pinhole Testing:</b> The pinhole testing device can determine if a problem with acuity is the result of refractive error (and thus correctable with glasses) or due to another process. The pinholes only allow the passage of light which is perpendicular to the lens, and thus does not need to be bent prior to being focused onto the retina. The patient is instructed to view the Snellen chart with the pinholes up (below right) and then again with them in the down position (below left). If the deficit corrects with the pinholes in place, the acuity issue is related to a refractive problem.</p>
+                        <div class="container text-center">
+                            <!-- Image Preview for Modal -->
+                            <img src="images/eye_pinhole1.jpg" style="width:100%;max-width:100px" data-toggle="modal" data-target="#eye_pinhole1">
+                            <!-- Modal -->
+                            <div class="modal fade" id="eye_pinhole1" tabindex="-1" role="dialog" aria-labelledby="eye_pinhole1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered" role="document">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title text-center" id="eye_pinhole1">Eye Pinhole Open</h5>
+                                        </div>
+                                        <div class="modal-body">
+                                            <img class="center-block" src="images/eye_pinhole1.jpg" style="width:100%;max-width:400px">
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <img src="images/eye_pinhole2.jpg" style="width:100%;max-width:100px" data-toggle="modal" data-target="#eye_pinhole2">
+                            <!-- Modal -->
+                            <div class="modal fade" id="eye_pinhole2" tabindex="-1" role="dialog" aria-labelledby="eye_pinhole2" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered" role="document">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title text-center" id="eye_pinhole2">Eye Pinhole Closed</h5>
+                                        </div>
+                                        <div class="modal-body">
+                                            <img class="center-block" src="images/eye_pinhole2.jpg" style="width:100%;max-width:400px">
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default">
+                <div class="panel-heading" data-toggle="collapse" href="#collapse2">
+                    <h4 class="panel-title">
+                    Observation &amp; External Anatomy
+                    </h4>
+                </div>
+                <div id="collapse2" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <p><b>1) Occular Symmetry:</b> Occular Symmetry: Occasionally, one of the muscles that controls eye movement will be weak or foreshortened, causing one eye to appear deviated medially or laterally compared with the other.</p>
+                        <p><b>2) Eye Lid Symmetry:</b> Both eye lids should cover approximately the same amount of eyeball. Damage to the nerves controlling these structures (Cranial Nerves 3 and 7) can cause the upper or lower lids on one side to appear lower then the other.</p>
+                        <p><b>3) Sclera:</b> The normal sclera is white and surrounds the iris and pupil. In the setting of liver or blood disorders that cause hyperbilirubinemia, the sclera may appear yellow, referred to as icterus. This can be easily confused with a muddy-brown discoloration common among older African Americans that is a variant of normal.</p>
+                        <p><b>4) Conjunctiva:</b> The sclera is covered by a thin transparent membrane known as the conjunctiva, which reflects back onto the underside of the eyelids. Normally, it's invisible except for the fine blood vessels that run through it. When infected or otherwise inflamed, this layer can appear quite red, a condition known as conjunctivitis. Alternatively, the conjunctiva can appear pale if patient is very anemic. By gently applying pressure and pulling down and away on the skin below the lower lid, you can examine the conjunctival reflection, which is the best place to identify this finding.</p>
+                        <p>Blood can also accumulate underneath the conjunctiva when one of the small blood vessels within it ruptures. This may be the result of relatively minor trauma (cough, sneeze, or direct blow), a bleeding disorder or idiopathic. The resulting collection of blood is called a subconjunctival hemorrhage. While dramatic, it is generally self limited and does not affect vision.</p>
+                        <p><b>5) Pupil and Iris:</b> Normally, both of these structures are round and symmetric.</p>
+                        <p>When performing the rest of the exam, make sure that you are in a comfortable position. The critical maneuver is assuring that the patient is seated at a height such that their eyes are essentially on the same level as your own when you are standing next to them.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default">
+                <div class="panel-heading" data-toggle="collapse" href="#collapse3">
+                    <h4 class="panel-title">
+                    Extra-ocular Movements
+                    </h4>
+                </div>
+                <div id="collapse3" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <p>Normally, the eyes move in concert (e.g. when the left eye moves left, the right eye moves left to a similar degree). The brain takes the input from each eye and puts it together to form a single image. This coordinated movement depends on 6 extraocular muscles that insert around the eye balls, allowing them to move in all directions. Each muscle is innervated by one of 3 Cranial Nerves (CNs): CNs 3 (Oculomotor), 4 (Trochlear) and 6 (Abducens). Movements are described as: elevation (pupil directed upwards), depression (pupil directed downwards), adbduction (pupil directed laterally), adduction (pupil directed medially), extorsion (top of eye rotating away from the nose), and intorsion (top of eye rotating towards the nose). We'll first review the individual Extraocular Muscles (EOMs), then the CNs which innervate them, and lastly functional testing and pathology.</p>
+                        <p>The medial and lateral rectus muscles are described first, as their functions are very straight forward: <br />
+                            Lateral rectus: Abduction (ie lateral movement along the horizontal plane)<br />
+                        Medial rectus: Adduction (ie. Medial movement along the horizontal plane)</p>
+                        <p>The remaining muscles each causes movement in more than one direction (e.g. some combination of elevation/depression, abduction/adduction, intorsion/extorsion). This is due to the fact that they insert on the eyeball at various angles, and in the case of the superior oblique, thru a pulley. Review of the origin and insertion of each muscle sheds light on its actions (see links @ the end of this section). The net impact of any one EOM is the result of the position of the eye and the sum of forces from all other contributing muscles.</p>
+                        <p>Specific actions of the remaining EOMs are described below. The action which the muscle primarily performs is listed first, followed by secondary and then tertiary actions.
+                            <ol type="1">
+                                <li><b>Inferior rectus:</b> depression, extorsion and adduction.</li>
+                                <li><b>Superior rectus:</b> elevation, intorsion and adduction</li>
+                                <li><b>Superior oblique:</b> intorsion, depression and abduction </li>
+                                <li><b>Inferior oblique:</b> extorsion, elevation and abduction</li>
+                            </ol>
+                        </p>
+                        <p>The muscles, in turn, are innervated by 3 different cranial nerves. Patterns of innervations are as follows:
+                            Cranial 4 (Trochlear): innervates the superior oblique<br />
+                            Cranial Nerve 6 (Abducens): innervates the lateral rectus<br />
+                        Cranial Nerve 3 (Oculomotor): innervates all the remaining muscles (ie medial rectus, inferior oblique, superior rectus and inferior rectus).</p>
+                        <p>You can remember this via the mnemonic: "SO-4, LR-6, All the rest 3" (ie Superior Oblique by CN 4, Lateral rectus by CN 6, and all the other EOMs by CN 3).</p>
+                        <p>In the setting of an eye movement problem, isolating which muscle or CN is the culprit can be tricky. When trying to isolate a problem, it can help to check movement in the direction in which that muscle is the primary mover. This can be assessed as follows:
+                            <ol type="1">
+                                <li><b>Superior oblique:</b> Depresses the eye when looking medially</li>
+                                <li><b>Inferior oblique:</b> Elevates the eye when looking medially</li>
+                                <li><b>Superior rectus:</b> Elevates the eye when looking laterally</li>
+                                <li><b>Inferior rectus:</b> Depresses the eye when looking laterally</li>
+                                <li><b>Medial rectus:</b> Adduction when pupil moving along horizontal plane</li>
+                                <li><b>Lateral rectus:</b> Abduction when pupil moving along horizontal plane</li>
+                            </ol>
+                        </p>
+                        <p> Practically speaking, cranial nerve testing is done such that the examiner can observe eye movements in all directions. The movements should be smooth and coordinated. To assess, proceed as follows:
+                            <ol type="1">
+                                <li>Stand in front of the patient.</li>
+                                <li>Ask them to follow your finger with their eyes while keeping their head in one position</li>
+                                <li>Using your finger, trace an imaginary "H" or rectangular shape in front of them, making sure that your finger moves far enough out and up/down so that you're able to see all appropriate eye movements (ie lateral and up, lateral down, medial down, medial up).</li>
+                                <li>At the end, bring your finger directly in towards the patient's nose. This will cause the patient to look cross-eyed and the pupils should constrict, a response referred to as accommodation.</li>
+                            </ol>
+                        </p>
+                        <b>Testing Extraocular Movements</b>
+                    </p>
+                    <p><strong>Interpretation:</strong> The eyes should be able to easily and smoothly follow your finger.</p>
+                    <p><strong>Pathology:</strong> Isolated lesions of a cranial nerve or the muscle itself can adversely affect extraocular movement. Patients will report diplopia (double vision) when they look in a direction that's affected. This is because the brain can't put together the discordant images in a way that forms a single picture. In response, they will either assume a head tilt that attempts to correct for the abnormal eye positioning or close the abnormal eye. As an example, the patient shown below has a left cranial nerve 6 lesion, which means that his left lateral rectus no longer functions. When he looks right, his vision is normal. However, when he looks left, he experiences double vision as the left eye can't move laterally. This is referred to as horizontal diplopia.</p>
+                    <p>Even with this information, trying to isolate the precise source of the problem can be tricky and subtle, sometimes requiring special testing (not discussed here). In addition, other findings can help localize the source of the problem. In the setting of a CN 3 palsy, the eye will tend to be positioned laterally and downward. This is because the unopposed action of CN 4 and 6 move the eye to this position. In addition, the lid will droop (known as ptosis) as CN3 controls lid elevation (Levator Palpebrae Superioris muscle). As well, the pupil will be dilated, as efferent parasympathetics (controlling constriction) travel with CN 3. This is well demonstrated in the picture below. In addition, the pupil will not respond well to direct or consensual (shined in the opposite eye) light. The unaffected eye will respond normally to light shined in either eye, as afferent impulses travel with CN2 and are unaffected.</p>
+                    <p>Disorders of eye movement can also be due to problems with the extraocular muscles themselves. For example, pictured below is a patient who has suffered a traumatic left orbital injury. The inferior rectus muscle has become entrapped within the resulting fracture, preventing the left eye from being able to look downward. The scleral blood and peri-orbital echymosis are secondary to the trauma as well.</p>
+                    <p>
+                        <p>More on Extraocular movements:<a href="http://www.tedmontgomery.com/the_eye/eom.html#top">http://www.tedmontgomery.com/the_eye/eom.html#top</a><br />
+                        Dartmouth Neurosciences - Extraocular movments <a href="http://www.dartmouth.edu/~dons/part_1/chapter_4.html">http://www.dartmouth.edu/~dons/part_1/chapter_4.html</a><br />
+                        Yale University - <a href="http://info.med.yale.edu/caim/cnerves/cn3/cn3_3.html">Extraocular Muscles http://info.med.yale.edu/caim/cnerves/cn3/cn3_3.html</a><br />
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="panel panel-default">
+            <div class="panel-heading" data-toggle="collapse" href="#collapse4">
+                <h4 class="panel-title">
+                Visual Fields
+                </h4>
+            </div>
+            <div id="collapse4" class="panel-collapse collapse">
+                <div class="panel-body">
+                    <p><b><a name=Visual></a>Visual fields:</b> The normal visual field for each eye extends out from
+                    the patient in all directions, with an area of overlap directly in front.
+                    Field cuts refer to specific regions where the patient has lost their ability
+                    to see. This occurs when the transmitted visual impulse is interrupted at
+                    some point in its path from the retina to the visual cortex in the back of
+                    the brain. You would, in general, only include a visual field assessment if
+                    the patient complained of loss of sight; in particular "blind spots" or "holes"
+                in their vision.Visual fields can be crudely assessed as follows: </p>
+                <ol type=1>
+                    <li>The examiner should be nose to nose with the patient, separated by approximately
+                    8 to 12 inches.</li>
+                    <li>Each eye is checked separately. The examiner closes one eye and the
+                        patient closes the one opposite. The open eyes should then be staring
+                    directly at one another.</li>
+                    <li>The examiner should move their hand out towards the periphery of his/her
+                        visual field on the side where the eyes are open. The finger should be
+                    equidistant from both persons.</li>
+                    <li>The examiner should then move the wiggling finger in towards them, along
+                        an imaginary line drawn between the two persons.The patient and examiner
+                    should detect the finger at more or less the same time.</li>
+                    <li>The finger is then moved out to the diagonal corners of the field and
+                        moved inwards from each of these directions. Testing is then done starting
+                        at a point in front of the closed eyes. The wiggling finger is moved towards
+                    the open eyes.</li>
+                    <li>The other eye is then tested.</li>
+                </ol>
+                <p>
+                    Meaningful interpretation is predicated upon the examiner having normal
+                fields, as they are using themselves for comparison.</p>
+                <p>
+                    If the examiner cannot seem to move their finger to a point that is outside
+                    the patient's field don't worry, as it simply means that their fields are
+                normal.</p>
+                <p>
+                    <strong>Interpretation:</strong> This test is rather crude, and it is quite possible to
+                    have small visual field defects that would not be apparent on this type
+                    of testing. Prior to interpreting abnormal findings, the examiner must understand
+                    the normal pathways by which visual impulses travel from the eye to the
+                brain.</p>
+                <p>
+                    For more information about visual field testing, see the following links:
+                    <p> <a href=http://thalamus.wustl.edu/course/basvis.html>Washington University,
+                    review of visual field of testing and pathology</a>
+                    <p> <a href="http://anatomy.uams.edu/anatomyhtml/atlas_html/eye_38.html">University
+                    of Arkansas, gross anatomy of visual pathway</a>
+                </p>
+            </p>
+        </div>
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading" data-toggle="collapse" href="#collapse5">
+        <h4 class="panel-title">
+        Pupil Exam
+        </h4>
+    </div>
+    <div id="collapse5" class="panel-collapse collapse">
+        <div class="panel-body">Lorem ipsum dolor sit amet, consectetur adipisicing elit,
+            sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+            minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.</div>
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading" data-toggle="collapse" href="#collapse6">
+        <h4 class="panel-title">
+        <a name="#ophthalmoscope">Using the Ophthalmosocpe</a>
+        </h4>
+    </div>
+    <div id="collapse6" class="panel-collapse collapse">
+        <div class="panel-body">Lorem ipsum dolor sit amet, consectetur adipisicing elit,
+            sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+            minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.</div>
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading" data-toggle="collapse" href="#collapse7">
+        <h4 class="panel-title">
+        External Structures
+        </h4>
+    </div>
+    <div id="collapse7" class="panel-collapse collapse">
+        <div class="panel-body">Lorem ipsum dolor sit amet, consectetur adipisicing elit,
+            sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+            minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.</div>
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading" data-toggle="collapse" href="#collapse8">
+        <h4 class="panel-title">
+        Retinal Exam
+        </h4>
+    </div>
+    <div id="collapse8" class="panel-collapse collapse">
+        <div class="panel-body">Lorem ipsum dolor sit amet, consectetur adipisicing elit,
+            sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+            minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.</div>
+    </div>
+</div>
+</div>
+<!--Footer Text-->
+<div class="container-fluid text-center">
+<h5>Web Site Design by Kilian Burke, MS2</h5>
+<h5>Content and Photographs by Charlie Goldberg, M.D., UCSD School of Medicine and VA Medical Center, San Diego, California 92093-0611.</h5>
+<h5>Send Comments to: Charlie Goldberg, M.D.</h5>
+</div>
+</body>
+</html>
