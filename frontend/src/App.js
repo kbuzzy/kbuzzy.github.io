@@ -245,12 +245,32 @@ function PcicuExceptionMonthEditor({ months, selectedMonths, onToggle }) {
   );
 }
 
-function BackendStatusBadge({ status, apiUrl }) {
+function BackendStatusBadge({ status, apiUrl, onRetry }) {
   const statusStyles = {
-    checking: { bg: "#e9ecef", color: "#495057", label: "Checking backend..." },
-    connected: { bg: "#d4edda", color: "#155724", label: "Connected to backend" },
-    error: { bg: "#fde8e8", color: "#c0392b", label: "Backend unavailable" },
-    unconfigured: { bg: "#fff3cd", color: "#856404", label: "Backend not configured" },
+    checking: {
+      bg: "#e9ecef",
+      color: "#495057",
+      label: "Checking backend...",
+      detail: "Waking the backend can take a little time on Render's free tier.",
+    },
+    connected: {
+      bg: "#d4edda",
+      color: "#155724",
+      label: "Connected to backend",
+      detail: "The live site can reach the scheduling API.",
+    },
+    error: {
+      bg: "#fde8e8",
+      color: "#c0392b",
+      label: "Backend unavailable",
+      detail: "If Render was sleeping, this should recover automatically after a short retry window.",
+    },
+    unconfigured: {
+      bg: "#fff3cd",
+      color: "#856404",
+      label: "Backend not configured",
+      detail: "Set REACT_APP_API_URL in the Pages workflow variables.",
+    },
   };
   const current = statusStyles[status] || statusStyles.checking;
 
@@ -270,6 +290,15 @@ function BackendStatusBadge({ status, apiUrl }) {
         <span style={{ marginLeft: 8, fontSize: 12 }}>
           {apiUrl}
         </span>
+      )}
+      <div style={{ fontSize: 12, marginTop: 4 }}>{current.detail}</div>
+      {onRetry && status !== "connected" && status !== "unconfigured" && (
+        <button
+          onClick={onRetry}
+          style={{ ...btnStyle, marginTop: 8, padding: "4px 10px" }}
+        >
+          Retry connection
+        </button>
       )}
     </div>
   );
@@ -961,6 +990,20 @@ export default function App() {
   const months = useMemo(() => listMonths(start, end), [start, end]);
   const apiConfigured = Boolean(API_URL);
 
+  const checkBackend = useCallback(async () => {
+    if (!apiConfigured) {
+      setBackendStatus("unconfigured");
+      return;
+    }
+    setBackendStatus("checking");
+    try {
+      const response = await fetch(`${API_URL}/`, { method: "GET" });
+      setBackendStatus(response.ok ? "connected" : "error");
+    } catch {
+      setBackendStatus("error");
+    }
+  }, [apiConfigured]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(
@@ -1000,23 +1043,22 @@ export default function App() {
     }
 
     let cancelled = false;
-    const checkBackend = async () => {
-      setBackendStatus("checking");
+    const wrappedCheck = async () => {
+      if (cancelled) return;
       try {
-        const response = await fetch(`${API_URL}/`, { method: "GET" });
-        if (!cancelled) {
-          setBackendStatus(response.ok ? "connected" : "error");
-        }
+        await checkBackend();
       } catch {
         if (!cancelled) setBackendStatus("error");
       }
     };
 
-    checkBackend();
+    wrappedCheck();
+    const intervalId = window.setInterval(wrappedCheck, 30000);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [apiConfigured]);
+  }, [apiConfigured, checkBackend]);
 
   const generateSchedule = useCallback(async () => {
     setLoading(true);
@@ -1146,7 +1188,7 @@ export default function App() {
 
       {activeTab === "scheduler" ? (
         <>
-          <BackendStatusBadge status={backendStatus} apiUrl={API_URL} />
+          <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
           <div style={{ background: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <RosterEditor
               roster={roster}
@@ -1237,12 +1279,12 @@ export default function App() {
               color: "#555",
             }}
           >
-            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} />
+            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
             Generate a schedule from the Scheduler tab to view the finalized calendar, monthly rotations, holiday weekends, and validation results here.
           </div>
         ) : (
           <>
-            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} />
+            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
             <ValidationPanel checks={validation} />
             <RotationTable roster={roster} rotations={rotations} months={months} />
             <HolidayWeekendTable holidayWeekends={holidayWeekends} />
