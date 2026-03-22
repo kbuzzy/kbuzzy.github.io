@@ -42,6 +42,8 @@ class ScheduleRequest(BaseModel):
     holidays: Optional[dict[str, list[str]]] = {}
     pgy_years: dict[str, str]
     board_exam_fellows: Optional[list[str]] = []
+    holiday_preferences: dict[str, dict[str, list[str]]]
+    pcicu_exception_months: list[str]
 
     @field_validator("fellows")
     @classmethod
@@ -131,6 +133,19 @@ def create_schedule(req: ScheduleRequest) -> dict:
             detail=f"board exam fellows must be included in fellows: {', '.join(unknown_board_fellows)}",
         )
 
+    missing_preferences = [name for name in req.fellows if name not in req.holiday_preferences]
+    if missing_preferences:
+        raise HTTPException(
+            status_code=400,
+            detail=f"missing holiday preferences for: {', '.join(missing_preferences)}",
+        )
+
+    if len(set(req.pcicu_exception_months)) != len(req.pcicu_exception_months):
+        raise HTTPException(
+            status_code=400,
+            detail="pcicu_exception_months must not contain duplicates",
+        )
+
     try:
         result = generate_schedule(
             req.fellows,
@@ -140,6 +155,8 @@ def create_schedule(req: ScheduleRequest) -> dict:
             holidays,
             req.pgy_years,
             req.board_exam_fellows,
+            req.holiday_preferences,
+            req.pcicu_exception_months,
         )
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))

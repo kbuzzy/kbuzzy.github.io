@@ -9,12 +9,13 @@ from ortools.sat.python import cp_model
 MAX_SOLVER_SECONDS = 60
 OCTOBER_BOARD_WEIGHT = 10
 CATH_THURSDAY_WEIGHT = 2
+PGY_PREFERENCE_WEIGHTS = {"PGY-1": 1, "PGY-2": 2, "PGY-3": 3}
 
 MONTH_KEYS = [
     "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12",
     "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06",
 ]
-EXCEPTION_TUESDAY_MONTHS = {
+DEFAULT_EXCEPTION_TUESDAY_MONTHS = {
     "2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05",
 }
 ROTATIONS = ["consult", "imaging", "research", "cath", "achd_ep", "pcicu"]
@@ -63,6 +64,11 @@ HOLIDAY_WEEKENDS = {
         "holiday_date": "2027-06-19",
     },
 }
+MAJOR_HOLIDAYS = {
+    "Thanksgiving": "2026-11-26",
+    "Christmas": "2026-12-25",
+    "New Year's": "2027-01-01",
+}
 
 
 def _idx(date: datetime, start: datetime) -> int:
@@ -85,6 +91,8 @@ def generate_schedule(
     holidays: dict[str, list[datetime]],
     pgy_years: dict[str, str],
     board_exam_fellows: list[str],
+    holiday_preferences: dict[str, dict[str, list[str]]],
+    pcicu_exception_months: list[str],
 ) -> dict:
     del holidays
 
@@ -92,6 +100,16 @@ def generate_schedule(
         raise ValueError("the schedule must include exactly 6 fellows")
     if start_date.strftime("%Y-%m-%d") != "2026-07-01" or end_date.strftime("%Y-%m-%d") != "2027-06-30":
         raise ValueError("the current rules require the window 07/01/2026 through 06/30/2027")
+    if not pcicu_exception_months:
+        pcicu_exception_months = sorted(DEFAULT_EXCEPTION_TUESDAY_MONTHS)
+    exception_tuesday_months = set(pcicu_exception_months)
+    if len(exception_tuesday_months) != 6:
+        raise ValueError("exactly 6 PCICU exception months must be selected")
+    invalid_exception_months = exception_tuesday_months.difference(MONTH_KEYS)
+    if invalid_exception_months:
+        raise ValueError(
+            "pcicu exception months must fall within the academic year window"
+        )
 
     pgy_counts = {pgy: 0 for pgy in REQUIRED_PGY_COUNTS}
     for fellow in fellows:
@@ -102,6 +120,23 @@ def generate_schedule(
     for pgy, required in REQUIRED_PGY_COUNTS.items():
         if pgy_counts[pgy] != required:
             raise ValueError("the roster must include exactly two fellows in each of PGY-1, PGY-2, and PGY-3")
+
+    expected_major = set(MAJOR_HOLIDAYS)
+    expected_weekends = {info["label"] for info in HOLIDAY_WEEKENDS.values()}
+    for fellow in fellows:
+        prefs = holiday_preferences.get(fellow)
+        if not prefs:
+            raise ValueError(f"missing holiday preferences for {fellow}")
+        major_list = prefs.get("majorHolidays", [])
+        weekend_list = prefs.get("holidayWeekends", [])
+        if set(major_list) != expected_major or len(major_list) != len(expected_major):
+            raise ValueError(
+                f"{fellow} must rank each major holiday exactly once"
+            )
+        if set(weekend_list) != expected_weekends or len(weekend_list) != len(expected_weekends):
+            raise ValueError(
+                f"{fellow} must rank each holiday weekend exactly once"
+            )
 
     days = (end_date - start_date).days + 1
     n = len(fellows)
@@ -129,7 +164,7 @@ def generate_schedule(
     for m in range(len(MONTH_KEYS)):
         model.add(sum(rotation[(f, m, rotation_index["consult"])] for f in range(n)) == 1)
         model.add(sum(rotation[(f, m, rotation_index["cath"])] for f in range(n)) == 1)
-        if MONTH_KEYS[m] in EXCEPTION_TUESDAY_MONTHS:
+        if MONTH_KEYS[m] in exception_tuesday_months:
             model.add(sum(rotation[(f, m, rotation_index["pcicu"])] for f in range(n)) == 0)
         else:
             model.add(sum(rotation[(f, m, rotation_index["pcicu"])] for f in range(n)) == 1)
@@ -212,7 +247,7 @@ def generate_schedule(
             for f in range(n):
                 model.add(call[(f, d)] == rotation[(f, m, rotation_index["consult"])])
         elif dow == 1:
-            target_rotation = "consult" if month in EXCEPTION_TUESDAY_MONTHS else "pcicu"
+            target_rotation = "consult" if month in exception_tuesday_months else "pcicu"
             for f in range(n):
                 model.add(call[(f, d)] == rotation[(f, m, rotation_index[target_rotation])])
         else:
@@ -222,7 +257,7 @@ def generate_schedule(
             consult_var = rotation[(f, m, rotation_index["consult"])]
             if dow == 0:
                 continue
-            if dow == 1 and month in EXCEPTION_TUESDAY_MONTHS:
+            if dow == 1 and month in exception_tuesday_months:
                 continue
             model.add(call[(f, d)] + consult_var <= 1)
 
@@ -257,6 +292,32 @@ def generate_schedule(
         f = fellows.index(fellow)
         soft_terms.append(OCTOBER_BOARD_WEIGHT * rotation[(f, october_idx, rotation_index["imaging"])])
         soft_terms.append(OCTOBER_BOARD_WEIGHT * rotation[(f, october_idx, rotation_index["research"])])
+
+    for fellow in fellows:
+        f = fellows.index(fellow)
+        seniority_weight = PGY_PREFERENCE_WEIGHTS[pgy_years[fellow]]
+        prefs = holiday_preferences[fellow]
+
+        major_scores = {
+            label: len(prefs["majorHolidays"]) - idx
+            for idx, label in enumerate(prefs["majorHolidays"])
+        }
+        for label, iso_date in MAJOR_HOLIDAYS.items():
+            idx = _idx(_parse_iso(iso_date), start_date)
+            if 0 <= idx < days:
+                soft_terms.append(
+                    seniority_weight * major_scores[label] * call[(f, idx)]
+                )
+
+        weekend_scores = {
+            label: len(prefs["holidayWeekends"]) - idx
+            for idx, label in enumerate(prefs["holidayWeekends"])
+        }
+        for start_iso, info in HOLIDAY_WEEKENDS.items():
+            start_idx = _idx(_parse_iso(start_iso), start_date)
+            soft_terms.append(
+                seniority_weight * weekend_scores[info["label"]] * call[(f, start_idx)]
+            )
 
     for d in range(days):
         date = start_date + timedelta(days=d)

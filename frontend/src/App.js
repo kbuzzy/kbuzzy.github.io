@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -11,6 +11,8 @@ const API_URL = process.env.REACT_APP_API_URL
     : "");
 const DATE_FMT = "MM/DD/YYYY";
 const MAX_VACATION_WEEKS = 4;
+const STORAGE_KEY = "fellowship-scheduler-state-v1";
+const DEFAULT_PCICU_EXCEPTION_MONTHS = ["2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05"];
 
 const PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"];
 const CONSULT_COLOR = "#d8dde6";
@@ -108,6 +110,16 @@ function createDefaultPreferenceState() {
   );
 }
 
+function readStoredState() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function exportMonthlyCSV(schedule, startStr, endStr) {
   const byDate = {};
   for (const item of schedule) byDate[item.date] = item.fellow;
@@ -190,6 +202,75 @@ function BoardExamEditor({ roster, boardExamIds, onToggle }) {
           </label>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PcicuExceptionMonthEditor({ months, selectedMonths, onToggle }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        PICU Tuesday Coverage Exception Months
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Select exactly 6 months when PICU covers Tuesday nights instead of the PCICU fellow
+        </span>
+      </label>
+      <div style={{ display: "grid", gap: 8 }}>
+        {months.map((month) => (
+          <label
+            key={month.key}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: "#fff",
+              border: "1px solid #e0e0e0",
+              borderRadius: 6,
+              padding: "8px 10px",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={selectedMonths.includes(month.key)}
+              onChange={() => onToggle(month.key)}
+            />
+            <span>{month.label}</span>
+          </label>
+        ))}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 12, color: selectedMonths.length === 6 ? "#155724" : "#c0392b" }}>
+        {selectedMonths.length}/6 months selected
+      </div>
+    </div>
+  );
+}
+
+function BackendStatusBadge({ status, apiUrl }) {
+  const statusStyles = {
+    checking: { bg: "#e9ecef", color: "#495057", label: "Checking backend..." },
+    connected: { bg: "#d4edda", color: "#155724", label: "Connected to backend" },
+    error: { bg: "#fde8e8", color: "#c0392b", label: "Backend unavailable" },
+    unconfigured: { bg: "#fff3cd", color: "#856404", label: "Backend not configured" },
+  };
+  const current = statusStyles[status] || statusStyles.checking;
+
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "10px 12px",
+        background: current.bg,
+        border: "1px solid rgba(0,0,0,0.08)",
+        borderRadius: 6,
+        color: current.color,
+      }}
+    >
+      <strong>{current.label}</strong>
+      {apiUrl && (
+        <span style={{ marginLeft: 8, fontSize: 12 }}>
+          {apiUrl}
+        </span>
+      )}
     </div>
   );
 }
@@ -565,7 +646,7 @@ function RulesValidationTab({ checks, error }) {
       items: [
         "Monday call always goes to the monthly consult fellow.",
         "Tuesday call usually goes to the monthly PCICU fellow.",
-        "In August, November, January, February, April, and May, Tuesday call goes to the consult fellow instead.",
+        "In 6 selected exception months, PICU covers Tuesday nights so Tuesday call goes to the consult fellow instead.",
         "The consult fellow cannot take other call days outside the required Monday and eligible Tuesday assignments.",
         "The cath fellow is softly preferred for Thursday call when feasible.",
         "A fellow on Thursday call cannot also take the following non-holiday weekend.",
@@ -594,7 +675,7 @@ function RulesValidationTab({ checks, error }) {
       items: [
         "Daily coverage across the full academic year",
         "Monday consult assignments",
-        "Tuesday PCICU/consult exception-month rule",
+        "Tuesday PCICU/consult exception-month rule using the selected 6 PICU-covered months",
         "Weekend and holiday block integrity",
         "Consult-fellow exclusion from weekend call",
         "Thursday-to-following-weekend conflict check",
@@ -603,11 +684,12 @@ function RulesValidationTab({ checks, error }) {
       ],
     },
     {
-      title: "Upcoming Holiday Preferences",
+      title: "Holiday Preferences",
       items: [
-        "A future version will rank fellow preferences for Christmas, Thanksgiving, and New Year's, plus holiday weekends.",
-        "Preferences will be ordered from most preferred to work to least preferred to work.",
-        "Preference approval will be seniority-weighted, with PGY-3 favored over PGY-2 and PGY-2 favored over PGY-1.",
+        "Each fellow ranks Thanksgiving, Christmas, and New Year's from most preferred to work to least preferred to work.",
+        "Each fellow also ranks the six holiday weekends from most preferred to work to least preferred to work.",
+        "The solver uses those rankings as a soft preference objective.",
+        "Preference approval is seniority-weighted, with PGY-3 favored over PGY-2 and PGY-2 favored over PGY-1.",
       ],
     },
   ];
@@ -655,7 +737,7 @@ function RulesValidationTab({ checks, error }) {
   );
 }
 
-function buildValidation(schedule, rotations, holidayWeekends, start, end) {
+function buildValidation(schedule, rotations, holidayWeekends, start, end, exceptionMonths) {
   if (!schedule.length) return [];
 
   const byDate = {};
@@ -679,7 +761,7 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end) {
   const cathThursdayMatches = [];
   const holidayCounts = {};
 
-  const exceptionMonths = new Set(["2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05"]);
+  const exceptionMonthSet = new Set(exceptionMonths);
   const holidayStartMap = Object.fromEntries(HOLIDAY_WEEKENDS.map((item) => [item.start, item]));
   const holidayCoveredDates = new Set();
   HOLIDAY_WEEKENDS.forEach((item) => {
@@ -714,7 +796,7 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end) {
     }
 
     if (cur.day() === 2) {
-      const expected = exceptionMonths.has(month) ? consultByMonth[month] : pcicuByMonth[month];
+      const expected = exceptionMonthSet.has(month) ? consultByMonth[month] : pcicuByMonth[month];
       if (assigned !== expected) {
         tuesdayErrors.push(`${dateStr}: expected ${expected}, got ${assigned}`);
       }
@@ -854,23 +936,87 @@ const tableCellStyle = {
 };
 
 export default function App() {
-  const [roster, setRoster] = useState(INITIAL_ROSTER);
-  const [start, setStart] = useState("07/01/2026");
-  const [end, setEnd] = useState("06/30/2027");
-  const [vacations, setVacations] = useState(createDefaultVacations);
-  const [boardExamIds, setBoardExamIds] = useState([]);
-  const [holidayPreferences, setHolidayPreferences] = useState(createDefaultPreferenceState);
-  const [schedule, setSchedule] = useState([]);
-  const [rotations, setRotations] = useState([]);
-  const [holidayWeekends, setHolidayWeekends] = useState([]);
-  const [validation, setValidation] = useState([]);
+  const storedState = useMemo(() => readStoredState(), []);
+  const [roster, setRoster] = useState(storedState?.roster || INITIAL_ROSTER);
+  const [start, setStart] = useState(storedState?.start || "07/01/2026");
+  const [end, setEnd] = useState(storedState?.end || "06/30/2027");
+  const [vacations, setVacations] = useState(storedState?.vacations || createDefaultVacations);
+  const [boardExamIds, setBoardExamIds] = useState(storedState?.boardExamIds || []);
+  const [holidayPreferences, setHolidayPreferences] = useState(
+    storedState?.holidayPreferences || createDefaultPreferenceState,
+  );
+  const [pcicuExceptionMonths, setPcicuExceptionMonths] = useState(
+    storedState?.pcicuExceptionMonths || DEFAULT_PCICU_EXCEPTION_MONTHS,
+  );
+  const [schedule, setSchedule] = useState(storedState?.schedule || []);
+  const [rotations, setRotations] = useState(storedState?.rotations || []);
+  const [holidayWeekends, setHolidayWeekends] = useState(storedState?.holidayWeekends || []);
+  const [validation, setValidation] = useState(storedState?.validation || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [calendarDate, setCalendarDate] = useState(() => moment("07/01/2026", DATE_FMT).toDate());
   const [activeTab, setActiveTab] = useState("scheduler");
+  const [backendStatus, setBackendStatus] = useState(API_URL ? "checking" : "unconfigured");
 
   const months = useMemo(() => listMonths(start, end), [start, end]);
   const apiConfigured = Boolean(API_URL);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        roster,
+        start,
+        end,
+        vacations,
+        boardExamIds,
+        holidayPreferences,
+        pcicuExceptionMonths,
+        schedule,
+        rotations,
+        holidayWeekends,
+        validation,
+      }),
+    );
+  }, [
+    boardExamIds,
+    end,
+    holidayPreferences,
+    pcicuExceptionMonths,
+    holidayWeekends,
+    roster,
+    rotations,
+    schedule,
+    start,
+    vacations,
+    validation,
+  ]);
+
+  useEffect(() => {
+    if (!apiConfigured) {
+      setBackendStatus("unconfigured");
+      return;
+    }
+
+    let cancelled = false;
+    const checkBackend = async () => {
+      setBackendStatus("checking");
+      try {
+        const response = await fetch(`${API_URL}/`, { method: "GET" });
+        if (!cancelled) {
+          setBackendStatus(response.ok ? "connected" : "error");
+        }
+      } catch {
+        if (!cancelled) setBackendStatus("error");
+      }
+    };
+
+    checkBackend();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiConfigured]);
 
   const generateSchedule = useCallback(async () => {
     setLoading(true);
@@ -888,44 +1034,65 @@ export default function App() {
       setLoading(false);
       return;
     }
-
-    const response = await fetch(`${API_URL}/schedule`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fellows: names,
-        start,
-        end,
-        vacations: Object.fromEntries(
-          roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(vacations[fellow.id] || [])]),
-        ),
-        holidays: {},
-        pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
-        board_exam_fellows: roster
-          .filter((fellow) => boardExamIds.includes(fellow.id))
-          .map((fellow) => fellow.name.trim()),
-      }),
-    }).catch((err) => {
-      throw err;
-    });
+    if (pcicuExceptionMonths.length !== 6) {
+      setError("Please select exactly 6 PICU Tuesday exception months.");
+      setLoading(false);
+      return;
+    }
 
     try {
+      const response = await fetch(`${API_URL}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fellows: names,
+          start,
+          end,
+          vacations: Object.fromEntries(
+            roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(vacations[fellow.id] || [])]),
+          ),
+          holidays: {},
+          pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
+          board_exam_fellows: roster
+            .filter((fellow) => boardExamIds.includes(fellow.id))
+            .map((fellow) => fellow.name.trim()),
+          holiday_preferences: Object.fromEntries(
+            roster.map((fellow) => [
+              fellow.name.trim(),
+              holidayPreferences[fellow.id],
+            ]),
+          ),
+          pcicu_exception_months: pcicuExceptionMonths,
+        }),
+      });
+
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.detail || `Server error: ${response.status}`);
       }
       const data = await response.json();
+      setBackendStatus("connected");
       setSchedule(data.schedule || []);
       setRotations(data.rotations || []);
       setHolidayWeekends(data.holiday_weekends || []);
       setCalendarDate(moment(start, DATE_FMT).toDate());
-      setValidation(buildValidation(data.schedule || [], data.rotations || [], data.holiday_weekends || [], start, end));
+      setValidation(
+        buildValidation(
+          data.schedule || [],
+          data.rotations || [],
+          data.holiday_weekends || [],
+          start,
+          end,
+          pcicuExceptionMonths,
+        ),
+      );
     } catch (err) {
+      setBackendStatus("error");
       setError(err.message || "Unknown error");
     } finally {
       setLoading(false);
     }
-  }, [boardExamIds, roster, start, end, vacations]);
+  }, [boardExamIds, holidayPreferences, pcicuExceptionMonths, roster, start, end, vacations]);
 
   const events = schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
@@ -979,6 +1146,7 @@ export default function App() {
 
       {activeTab === "scheduler" ? (
         <>
+          <BackendStatusBadge status={backendStatus} apiUrl={API_URL} />
           <div style={{ background: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <RosterEditor
               roster={roster}
@@ -1016,6 +1184,18 @@ export default function App() {
               onToggle={(id) => setBoardExamIds((current) => (
                 current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
               ))}
+            />
+
+            <PcicuExceptionMonthEditor
+              months={months}
+              selectedMonths={pcicuExceptionMonths}
+              onToggle={(monthKey) =>
+                setPcicuExceptionMonths((current) => (
+                  current.includes(monthKey)
+                    ? current.filter((item) => item !== monthKey)
+                    : [...current, monthKey].sort()
+                ))
+              }
             />
 
             <HolidayPreferenceEditor
@@ -1057,10 +1237,12 @@ export default function App() {
               color: "#555",
             }}
           >
+            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} />
             Generate a schedule from the Scheduler tab to view the finalized calendar, monthly rotations, holiday weekends, and validation results here.
           </div>
         ) : (
           <>
+            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} />
             <ValidationPanel checks={validation} />
             <RotationTable roster={roster} rotations={rotations} months={months} />
             <HolidayWeekendTable holidayWeekends={holidayWeekends} />

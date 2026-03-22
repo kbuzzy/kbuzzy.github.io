@@ -69,6 +69,8 @@ Each monthly rotation lasts for the entire calendar month.
 - `research` is the only exception and may repeat in back-to-back months.
 - Fellows can optionally be flagged as taking board certification exams in October.
 - For October board exam takers, the solver prefers `imaging` or `research` in `October 2026` when feasible.
+- Each fellow can rank major holidays and holiday weekends from most preferred to work to least preferred to work.
+- Holiday preference approval is a soft objective that is weighted by seniority: `PGY-3` over `PGY-2` over `PGY-1`.
 
 ## Call Rules
 
@@ -81,7 +83,7 @@ Call is built after the monthly rotations are assigned.
 - If the holiday falls between Saturday and Monday, that holiday weekend expands to Friday-Monday.
 - Monday always goes to the monthly `consult` fellow.
 - Tuesday usually goes to the monthly `PCICU` fellow.
-- In `August 2026`, `November 2026`, `January 2027`, `February 2027`, `April 2027`, and `May 2027`, Tuesday instead goes to the monthly `consult` fellow.
+- In 6 selected exception months, PICU covers Tuesday nights, so Tuesday instead goes to the monthly `consult` fellow.
 - The consult fellow cannot take call on any other days besides Monday and the applicable Tuesday exception months.
 - The consult fellow cannot take a Friday-Sunday weekend block in their consult month.
 - Fellows who are on call Thursday night cannot also take the following non-holiday weekend.
@@ -95,6 +97,15 @@ The six holiday weekends in the current academic year are:
 - Good Friday
 - Memorial Day
 - Juneteenth
+
+For the `2026-2027` academic year, the default PICU-covered Tuesday exception months are:
+
+- August 2026
+- November 2026
+- January 2027
+- February 2027
+- April 2027
+- May 2027
 
 ## Weekend Quotas
 
@@ -113,6 +124,8 @@ The React app lets you:
 - rename each of the 6 fellows
 - manage four default vacation weeks for each fellow
 - mark any fellow as an October board-exam taker
+- choose the 6 PICU-covered exception months for Tuesday-night call rules
+- rank major holidays and holiday weekends for each fellow
 - generate the full rotation + call schedule
 - switch to a dedicated `Rules & Validation` tab that explains the scheduling model and lists the active validation checks
 - review the solved monthly rotations in a table
@@ -120,7 +133,7 @@ The React app lets you:
 - review the call schedule in a calendar
 - export the schedule as a monthly CSV
 
-The `Rules & Validation` tab is also the place where schedule conflicts, validation failures, and future preference-system notes are surfaced.
+The `Rules & Validation` tab is also the place where schedule conflicts and validation failures are surfaced.
 
 ## API
 
@@ -155,9 +168,17 @@ Example request:
     "Evan Kim": "PGY-3",
     "Frank Wu": "PGY-3"
   },
-  "board_exam_fellows": ["Alice Smith"]
+  "board_exam_fellows": ["Alice Smith"],
+  "holiday_preferences": {
+    "Alice Smith": {
+      "majorHolidays": ["Christmas", "Thanksgiving", "New Year's"],
+      "holidayWeekends": ["Labor Day", "MLK Day", "July 4", "Good Friday", "Memorial Day", "Juneteenth"]
+    }
+  }
 }
 ```
+
+In a real request, `holiday_preferences` must be provided for every fellow. The example above is abbreviated for readability.
 
 Example response shape:
 
