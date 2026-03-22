@@ -96,7 +96,7 @@ Call is built after the monthly rotations are assigned.
 - No fellow can work call on two consecutive days unless both days are part of the same weekend or holiday-weekend block.
 - The only weekday consecutive-call exception is the consult fellow covering both Monday and Tuesday in a selected PCICU exception month.
 - The consult fellow cannot take a Friday-Sunday weekend block in their consult month.
-- Fellows who are on call Thursday night cannot also take the following non-holiday weekend.
+- Fellows who are on a non-holiday Thursday call cannot also take the following weekend block, whether that next weekend is a normal weekend or a holiday weekend.
 - No fellow can be assigned to two weekend blocks in a row.
 - The monthly `cath` fellow is preferred on Thursday nights when feasible.
 

@@ -1113,9 +1113,27 @@ function ValidationPanel({ checks }) {
       </div>
       <div style={{ background: "#fff" }}>
         {checks.map((check) => (
-          <div key={check.label} style={{ padding: "8px 16px", borderBottom: "1px solid #f0f0f0" }}>
-            <span style={{ fontWeight: 600 }}>{check.label}: </span>
-            <span>{check.detail}</span>
+          <div
+            key={check.label}
+            style={{
+              padding: "10px 16px",
+              borderBottom: "1px solid #f0f0f0",
+              background: check.ok ? "#fff" : "#fde8e8",
+              borderLeft: check.ok ? "4px solid transparent" : "4px solid #c0392b",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontWeight: 700, color: check.ok ? "#155724" : "#c0392b" }}>
+                {check.ok ? "Pass" : "Failed"}
+              </span>
+              <span style={{ fontWeight: 600 }}>{check.label}</span>
+            </div>
+            <div>{check.detail}</div>
+            {!check.ok && check.suggestion && (
+              <div style={{ marginTop: 6, fontSize: 13, color: "#7a1f1f" }}>
+                Try: {check.suggestion}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -1233,7 +1251,7 @@ function RulesValidationTab({ checks, error }) {
         "No fellow can work call on two consecutive days outside a single weekend or holiday-weekend block.",
         "The only weekday consecutive-call exception is consult covering Monday and Tuesday in selected PCICU exception months.",
         "The cath fellow is softly preferred for Thursday call when feasible.",
-        "A fellow on Thursday call cannot also take the following non-holiday weekend.",
+        "A fellow on a non-holiday Thursday call cannot also take the following weekend block, whether that next weekend is a normal weekend or a holiday weekend.",
         "No fellow can be assigned to two weekend blocks in a row.",
       ],
     },
@@ -1683,6 +1701,7 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     ok: missing.length === 0,
     label: "Coverage",
     detail: missing.length === 0 ? "Every day has an assignment." : `Missing dates: ${missing.slice(0, 5).join(", ")}`,
+    suggestion: missing.length === 0 ? "" : "Adjust vacations, holiday-half dates, or exception months so every day has an assigned fellow.",
   });
   checks.push({
     ok: researchRunErrors.length === 0,
@@ -1690,26 +1709,31 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     detail: researchRunErrors.length === 0
       ? "No fellow has more than two consecutive research months."
       : researchRunErrors.slice(0, 3).join(" | "),
+    suggestion: researchRunErrors.length === 0 ? "" : "Swap one of the research months with imaging, cath, ACHD/EP, consult, or PCICU to break the streak.",
   });
   checks.push({
     ok: majorHolidayErrors.length === 0,
     label: "Major holiday blocks",
     detail: majorHolidayErrors.length === 0 ? "All major holiday halves stay together." : majorHolidayErrors.slice(0, 3).join(" | "),
+    suggestion: majorHolidayErrors.length === 0 ? "" : "Adjust the major holiday half dates or regenerate so each half stays with one fellow.",
   });
   checks.push({
     ok: mondayErrors.length === 0,
     label: "Consult Mondays",
     detail: mondayErrors.length === 0 ? "All Mondays go to the consult fellow." : mondayErrors.slice(0, 3).join(" | "),
+    suggestion: mondayErrors.length === 0 ? "" : "Change the monthly consult assignments or regenerate with fewer conflicting vacations.",
   });
   checks.push({
     ok: tuesdayErrors.length === 0,
     label: "Tuesday rule",
     detail: tuesdayErrors.length === 0 ? "All Tuesdays follow the PCICU/consult rule." : tuesdayErrors.slice(0, 3).join(" | "),
+    suggestion: tuesdayErrors.length === 0 ? "" : "Revisit the selected PCICU exception months or monthly PCICU/consult assignments.",
   });
   checks.push({
     ok: weekendErrors.length === 0,
     label: "Weekend blocks",
     detail: weekendErrors.length === 0 ? "All Friday-Sunday blocks stay together." : weekendErrors.slice(0, 3).join(" | "),
+    suggestion: weekendErrors.length === 0 ? "" : "Regenerate so each weekend or holiday block stays with a single fellow.",
   });
   checks.push({
     ok: consecutiveWeekendErrors.length === 0,
@@ -1717,6 +1741,7 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     detail: consecutiveWeekendErrors.length === 0
       ? "No fellow is assigned to back-to-back weekends."
       : consecutiveWeekendErrors.slice(0, 3).join(" | "),
+    suggestion: consecutiveWeekendErrors.length === 0 ? "" : "Try different vacations or holiday-half dates so weekend coverage can be redistributed.",
   });
   checks.push({
     ok: consecutiveCallErrors.length === 0,
@@ -1724,21 +1749,25 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     detail: consecutiveCallErrors.length === 0
       ? "No fellow is assigned to back-to-back call days outside allowed blocks."
       : consecutiveCallErrors.slice(0, 3).join(" | "),
+    suggestion: consecutiveCallErrors.length === 0 ? "" : "Reduce conflicting vacations or adjust exception months so consecutive weekday call can be reassigned.",
   });
   checks.push({
     ok: consultWeekendErrors.length === 0,
     label: "Consult weekends",
     detail: consultWeekendErrors.length === 0 ? "Consult fellows are excluded from weekend call." : consultWeekendErrors.slice(0, 3).join(" | "),
+    suggestion: consultWeekendErrors.length === 0 ? "" : "Move that fellow off consult in the affected month or relax other schedule pressure by adjusting vacations.",
   });
   checks.push({
     ok: pcicuWeekendErrors.length === 0,
     label: "PCICU weekends",
     detail: pcicuWeekendErrors.length === 0 ? "PCICU fellows are excluded from weekend call in their PCICU month." : pcicuWeekendErrors.slice(0, 3).join(" | "),
+    suggestion: pcicuWeekendErrors.length === 0 ? "" : "Adjust monthly PCICU assignments or vacation timing so weekends can be covered by a different fellow.",
   });
   checks.push({
     ok: thursdayWeekendErrors.length === 0,
     label: "Thursday to weekend",
-    detail: thursdayWeekendErrors.length === 0 ? "No Thursday call fellow also takes the following non-holiday weekend." : thursdayWeekendErrors.slice(0, 3).join(" | "),
+    detail: thursdayWeekendErrors.length === 0 ? "No Thursday call fellow also takes the following weekend block, including holiday weekends." : thursdayWeekendErrors.slice(0, 3).join(" | "),
+    suggestion: thursdayWeekendErrors.length === 0 ? "" : "Reassign the Thursday call or the following weekend block to a different fellow.",
   });
   checks.push({
     ok: true,
@@ -1749,11 +1778,15 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     ok: Object.values(holidayCounts).every((count) => count === 1),
     label: "Holiday weekends",
     detail: (holidayWeekends || []).map((item) => `${item.label}: ${item.fellow}`).join(", "),
+    suggestion: Object.values(holidayCounts).every((count) => count === 1) ? "" : "Regenerate so each fellow receives exactly one holiday weekend assignment.",
   });
   checks.push({
     ok: fellows.every((fellow) => majorHolidayCounts[fellow] === 1) && Object.values(majorHolidayCoverageCounts).every((count) => count === 2),
     label: "Major holidays",
     detail: (majorHolidays || []).map((item) => `${item.label}: ${item.fellow}`).join(", "),
+    suggestion: fellows.every((fellow) => majorHolidayCounts[fellow] === 1) && Object.values(majorHolidayCoverageCounts).every((count) => count === 2)
+      ? ""
+      : "Adjust the major holiday half dates or regenerate so each fellow receives exactly one major-holiday half and each holiday has two halves covered.",
   });
 
   return checks;

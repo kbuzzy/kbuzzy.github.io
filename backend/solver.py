@@ -480,6 +480,20 @@ def generate_schedule(
             model.add(cath_match >= call[(f, d)] + rotation[(f, m, rotation_index["cath"])] - 1)
             soft_terms.append(CATH_THURSDAY_WEIGHT * cath_match)
 
+    # A fellow covering a routine Thursday cannot also take the immediately
+    # following weekend block, regardless of whether that weekend is a holiday.
+    for d in range(days):
+        date = start_date + timedelta(days=d)
+        if date.weekday() != 3:
+            continue
+        if d in major_block_starts or d in holiday_block_starts:
+            continue
+        next_day = d + 1
+        if next_day not in block_days_by_start:
+            continue
+        for f in range(n):
+            model.add(call[(f, d)] + call[(f, next_day)] <= 1)
+
     for f in range(n):
         for m in range(len(MONTH_KEYS) - 2):
             hard_run = model.new_bool_var(f"hard_run_{f}_{m}")
