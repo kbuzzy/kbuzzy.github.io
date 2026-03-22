@@ -464,6 +464,69 @@ function randomVacationWeeks(months) {
   });
 }
 
+function weekOverlapsProtectedDates(weekStart, protectedDates) {
+  for (let offset = 0; offset < 5; offset += 1) {
+    if (protectedDates.has(weekStart.clone().add(offset, "days").format(DATE_FMT))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function listCandidateVacationWeeks(start, end, majorHolidayBlocks) {
+  const protectedDates = new Set();
+  HOLIDAY_WEEKENDS.forEach((item) => {
+    const cur = moment(item.start, DATE_FMT);
+    const last = moment(item.end, DATE_FMT);
+    while (cur.isSameOrBefore(last)) {
+      protectedDates.add(cur.format(DATE_FMT));
+      cur.add(1, "day");
+    }
+  });
+  Object.values(majorHolidayBlocks).forEach((halves) => {
+    halves.forEach((item) => {
+      const cur = moment(item.start, DATE_FMT);
+      const last = moment(item.end, DATE_FMT);
+      while (cur.isSameOrBefore(last)) {
+        protectedDates.add(cur.format(DATE_FMT));
+        cur.add(1, "day");
+      }
+    });
+  });
+
+  const candidates = [];
+  let cursor = moment(start, DATE_FMT).startOf("isoWeek");
+  const lastDate = moment(end, DATE_FMT);
+  while (cursor.clone().add(4, "days").isSameOrBefore(lastDate)) {
+    if (!weekOverlapsProtectedDates(cursor, protectedDates)) {
+      candidates.push({
+        from: cursor.format(DATE_FMT),
+        to: cursor.clone().add(4, "days").format(DATE_FMT),
+      });
+    }
+    cursor.add(1, "week");
+  }
+  return candidates;
+}
+
+function createTypicalVacations(roster, start, end, majorHolidayBlocks) {
+  const candidates = listCandidateVacationWeeks(start, end, majorHolidayBlocks);
+  const needed = roster.length * MAX_VACATION_WEEKS;
+  if (candidates.length < needed) {
+    throw new Error("Not enough non-overlapping vacation weeks are available for the typical test.");
+  }
+
+  return Object.fromEntries(
+    roster.map((fellow, fellowIndex) => [
+      fellow.id,
+      Array.from({ length: MAX_VACATION_WEEKS }, (_, slotIndex) => {
+        const candidate = candidates[fellowIndex + (slotIndex * roster.length)];
+        return { from: candidate.from, to: candidate.to };
+      }),
+    ]),
+  );
+}
+
 function createRandomPreferenceState(roster) {
   return Object.fromEntries(
     roster.map((fellow) => [
@@ -1155,7 +1218,7 @@ function TestResultPanel({ result }) {
       }}
     >
       <div style={{ fontWeight: 700, marginBottom: 6 }}>
-        Run Random Test: {result.ok ? "Passed" : "Failed"}
+        {result.title || "Test Result"}: {result.ok ? "Passed" : "Failed"}
       </div>
       <div style={{ fontSize: 14 }}>{result.message}</div>
       {result.details?.length > 0 && (
@@ -1172,10 +1235,16 @@ function TestResultPanel({ result }) {
 function LoadingPanel({ loading, mode }) {
   if (!loading) return null;
 
-  const label = mode === "randomTest" ? "Running random test" : "Generating schedule";
+  const label = mode === "randomTest"
+    ? "Running random test"
+    : mode === "typicalTest"
+      ? "Running typical schedule test"
+      : "Generating schedule";
   const detail = mode === "randomTest"
     ? "The app is creating a randomized request, solving it, validating the result, and checking the export flow."
-    : "The solver is assigning monthly rotations and then building the call schedule. This can take a little time.";
+    : mode === "typicalTest"
+      ? "The app is building a realistic schedule request with October PGY-1 board exams, distinct vacations, and the default PICU exception months."
+      : "The solver is assigning monthly rotations and then building the call schedule. This can take a little time.";
 
   return (
     <div
@@ -2126,7 +2195,7 @@ export default function App() {
         start,
         end,
         roster,
-        vacations,
+        randomVacations,
         data.holiday_weekends || [],
         data.major_holidays || [],
         majorHolidayBlocks,
@@ -2150,14 +2219,15 @@ export default function App() {
       const ok = hasValidation && hasEvents && exportWorked && validationPassed;
       setTestResult({
         ok,
+        title: "Run Random Test",
         message: ok
-          ? "Random scheduling request succeeded, validation checks passed, calendar data rendered, and CSV export generation worked."
+          ? "Random scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked."
           : "Random scheduling request completed, but one or more smoke-test checks failed.",
         details: [
           `Schedule days returned: ${(data.schedule || []).length}`,
           `Rotation assignments returned: ${(data.rotations || []).length}`,
           `Validation checks: ${nextValidation.length}`,
-          `CSV export generation: ${exportWorked ? "ok" : "failed"}`,
+          `Workbook export generation: ${exportWorked ? "ok" : "failed"}`,
           `Validation result: ${validationPassed ? "all checks passed" : "one or more checks failed"}`,
         ],
       });
@@ -2168,13 +2238,134 @@ export default function App() {
       setError(err.message || "Unknown error");
       setTestResult({
         ok: false,
+        title: "Run Random Test",
         message: "Random test could not complete.",
         details: [err.message || "Unknown error"],
       });
     } finally {
       setLoading(false);
     }
-  }, [apiConfigured, months, roster, start, end, vacations, majorHolidayBlocks]);
+  }, [apiConfigured, months, roster, start, end, majorHolidayBlocks]);
+
+  const runTypicalTest = useCallback(async () => {
+    if (!apiConfigured) return;
+
+    setLoadingMode("typicalTest");
+    setLoading(true);
+    setError(null);
+    setTestResult(null);
+
+    const typicalVacations = createTypicalVacations(roster, start, end, majorHolidayBlocks);
+    const typicalBoardExamIds = roster.filter((fellow) => fellow.pgy === "PGY-1").map((fellow) => fellow.id);
+    const typicalExceptionMonths = [...DEFAULT_PCICU_EXCEPTION_MONTHS];
+    const typicalPreferences = createRandomPreferenceState(roster);
+
+    setVacations(typicalVacations);
+    setBoardExamIds(typicalBoardExamIds);
+    setPcicuExceptionMonths(typicalExceptionMonths);
+    setHolidayPreferences(typicalPreferences);
+
+    const names = roster.map((fellow) => fellow.name.trim());
+
+    try {
+      const response = await fetch(`${API_URL}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fellows: names,
+          start,
+          end,
+          vacations: Object.fromEntries(
+            roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(typicalVacations[fellow.id] || [])]),
+          ),
+          holidays: {},
+          pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
+          board_exam_fellows: roster
+            .filter((fellow) => typicalBoardExamIds.includes(fellow.id))
+            .map((fellow) => fellow.name.trim()),
+          holiday_preferences: Object.fromEntries(
+            roster.map((fellow) => [fellow.name.trim(), typicalPreferences[fellow.id]]),
+          ),
+          major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
+          pcicu_exception_months: typicalExceptionMonths,
+        }),
+      });
+      setBackendStatus("connected");
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const nextValidation = buildValidation(
+        data.schedule || [],
+        data.rotations || [],
+        data.holiday_weekends || [],
+        data.major_holidays || [],
+        start,
+        end,
+        typicalExceptionMonths,
+        roster,
+      );
+      const workbook = exportCalendarWorkbook(
+        data.schedule || [],
+        start,
+        end,
+        roster,
+        typicalVacations,
+        data.holiday_weekends || [],
+        data.major_holidays || [],
+        majorHolidayBlocks,
+        typicalExceptionMonths,
+        { download: false },
+      );
+      const hasValidation = nextValidation.length > 0;
+      const hasEvents = (data.schedule || []).length > 0;
+      const exportWorked = typeof workbook === "string" && workbook.includes('Worksheet ss:Name="Assignments"');
+      const validationPassed = nextValidation.every((check) => check.ok);
+
+      setSchedule(data.schedule || []);
+      setRotations(data.rotations || []);
+      setHolidayWeekends(data.holiday_weekends || []);
+      setMajorHolidays(data.major_holidays || []);
+      setCalendarDate(moment(start, DATE_FMT).toDate());
+      setValidation(nextValidation);
+      setActiveTab("calendar");
+
+      const ok = hasValidation && hasEvents && exportWorked && validationPassed;
+      setTestResult({
+        ok,
+        title: "Run Typical Schedule Test",
+        message: ok
+          ? "Typical scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked."
+          : "Typical scheduling request completed, but one or more test checks failed.",
+        details: [
+          "Board exams: both PGY-1 fellows only",
+          "Vacation weeks: all fellows assigned distinct non-holiday weeks",
+          `PICU exception months: ${typicalExceptionMonths.join(", ")}`,
+          `Schedule days returned: ${(data.schedule || []).length}`,
+          `Rotation assignments returned: ${(data.rotations || []).length}`,
+          `Validation checks: ${nextValidation.length}`,
+          `Workbook export generation: ${exportWorked ? "ok" : "failed"}`,
+          `Validation result: ${validationPassed ? "all checks passed" : "one or more checks failed"}`,
+        ],
+      });
+    } catch (err) {
+      if (err instanceof TypeError) {
+        setBackendStatus("error");
+      }
+      setError(err.message || "Unknown error");
+      setTestResult({
+        ok: false,
+        title: "Run Typical Schedule Test",
+        message: "Typical test could not complete.",
+        details: [err.message || "Unknown error"],
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [apiConfigured, roster, start, end, majorHolidayBlocks]);
 
   const events = schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
@@ -2298,6 +2489,13 @@ export default function App() {
                 style={{ ...btnStyle, background: "#6f42c1", opacity: loading || !apiConfigured ? 0.6 : 1 }}
               >
                 Run Random Test
+              </button>
+              <button
+                onClick={runTypicalTest}
+                disabled={loading || !apiConfigured}
+                style={{ ...btnStyle, background: "#1d6f42", opacity: loading || !apiConfigured ? 0.6 : 1 }}
+              >
+                Run Typical Schedule Test
               </button>
               {schedule.length > 0 && (
                 <button
