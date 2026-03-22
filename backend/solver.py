@@ -224,6 +224,13 @@ def generate_schedule(
             for f in range(n):
                 model.add(call[(f, start_idx)] == call[(f, later_idx)])
 
+    ordered_block_starts = sorted(block_starts)
+    for i in range(len(ordered_block_starts) - 1):
+        current_start = ordered_block_starts[i]
+        next_start = ordered_block_starts[i + 1]
+        for f in range(n):
+            model.add(call[(f, current_start)] + call[(f, next_start)] <= 1)
+
     for f, fellow in enumerate(fellows):
         for vac_date in vacations.get(fellow, []):
             idx = _idx(vac_date, start_date)
@@ -266,16 +273,29 @@ def generate_schedule(
         m = month_index[month]
         for f in range(n):
             model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["consult"])] <= 1)
+            model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["pcicu"])] <= 1)
 
-    for d in range(days):
-        date = start_date + timedelta(days=d)
-        if date.weekday() != 3:
-            continue
-        if d in holiday_block_starts:
-            continue
+    day_to_block_start = {}
+    for start_idx, days_in_block in block_days_by_start.items():
+        for day_idx in days_in_block:
+            day_to_block_start[day_idx] = start_idx
+
+    for d in range(days - 1):
         next_day = d + 1
-        if next_day not in block_days_by_start:
+        date = start_date + timedelta(days=d)
+        next_date = start_date + timedelta(days=next_day)
+        month = month_dates[d]
+
+        if day_to_block_start.get(d) is not None and day_to_block_start.get(d) == day_to_block_start.get(next_day):
             continue
+
+        if (
+            date.weekday() == 0
+            and next_date.weekday() == 1
+            and month in exception_tuesday_months
+        ):
+            continue
+
         for f in range(n):
             model.add(call[(f, d)] + call[(f, next_day)] <= 1)
 

@@ -15,8 +15,6 @@ const STORAGE_KEY = "fellowship-scheduler-state-v1";
 const DEFAULT_PCICU_EXCEPTION_MONTHS = ["2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05"];
 
 const PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"];
-const CONSULT_COLOR = "#d8dde6";
-
 const ROTATION_LABELS = {
   consult: "Consult",
   imaging: "Imaging",
@@ -756,8 +754,12 @@ function RulesValidationTab({ checks, error }) {
         "Tuesday call usually goes to the monthly PCICU fellow.",
         "In 6 selected exception months, PICU covers Tuesday nights so Tuesday call goes to the consult fellow instead.",
         "The consult fellow cannot take other call days outside the required Monday and eligible Tuesday assignments.",
+        "The monthly PCICU fellow cannot take any weekend or holiday-weekend block during that same calendar month.",
+        "No fellow can work call on two consecutive days outside a single weekend or holiday-weekend block.",
+        "The only weekday consecutive-call exception is consult covering Monday and Tuesday in selected PCICU exception months.",
         "The cath fellow is softly preferred for Thursday call when feasible.",
         "A fellow on Thursday call cannot also take the following non-holiday weekend.",
+        "No fellow can be assigned to two weekend blocks in a row.",
       ],
     },
     {
@@ -785,7 +787,9 @@ function RulesValidationTab({ checks, error }) {
         "Monday consult assignments",
         "Tuesday PCICU/consult exception-month rule using the selected 6 PICU-covered months",
         "Weekend and holiday block integrity",
+        "No consecutive weekend assignments for any fellow",
         "Consult-fellow exclusion from weekend call",
+        "PCICU-fellow exclusion from weekend call",
         "Thursday-to-following-weekend conflict check",
         "Cath-fellow Thursday match count",
         "Holiday weekend distribution summary",
@@ -865,6 +869,9 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
   const tuesdayErrors = [];
   const weekendErrors = [];
   const consultWeekendErrors = [];
+  const pcicuWeekendErrors = [];
+  const consecutiveWeekendErrors = [];
+  const consecutiveCallErrors = [];
   const thursdayWeekendErrors = [];
   const cathThursdayMatches = [];
   const holidayCounts = {};
@@ -872,11 +879,15 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
   const exceptionMonthSet = new Set(exceptionMonths);
   const holidayStartMap = Object.fromEntries(HOLIDAY_WEEKENDS.map((item) => [item.start, item]));
   const holidayCoveredDates = new Set();
+  const blockStartByDate = {};
+  const weekendAssignments = [];
   HOLIDAY_WEEKENDS.forEach((item) => {
     const curHoliday = moment(item.start, DATE_FMT);
     const endHoliday = moment(item.end, DATE_FMT);
     while (curHoliday.isSameOrBefore(endHoliday)) {
-      holidayCoveredDates.add(curHoliday.format(DATE_FMT));
+      const dateKey = curHoliday.format(DATE_FMT);
+      holidayCoveredDates.add(dateKey);
+      blockStartByDate[dateKey] = item.start;
       curHoliday.add(1, "day");
     }
   });
@@ -922,8 +933,14 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
       if (new Set(dates).size !== 1) {
         weekendErrors.push(`${holiday.label}: holiday block does not stay with one fellow`);
       }
+      if (dates[0]) {
+        weekendAssignments.push({ start: dateStr, fellow: dates[0], label: holiday.label });
+      }
       if (dates[0] === consultByMonth[month]) {
         consultWeekendErrors.push(`${holiday.label}: consult fellow ${dates[0]} was assigned the holiday weekend`);
+      }
+      if (dates[0] === pcicuByMonth[month]) {
+        pcicuWeekendErrors.push(`${holiday.label}: PCICU fellow ${dates[0]} was assigned the holiday weekend`);
       }
     } else if (
       cur.day() === 5 &&
@@ -936,8 +953,17 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
       if (fri !== sat || fri !== sun) {
         weekendErrors.push(`${dateStr}: Fri=${fri}, Sat=${sat}, Sun=${sun}`);
       }
+      if (fri) {
+        weekendAssignments.push({ start: dateStr, fellow: fri, label: dateStr });
+      }
+      blockStartByDate[dateStr] = dateStr;
+      blockStartByDate[cur.clone().add(1, "day").format(DATE_FMT)] = dateStr;
+      blockStartByDate[cur.clone().add(2, "day").format(DATE_FMT)] = dateStr;
       if (fri === consultByMonth[month]) {
         consultWeekendErrors.push(`${dateStr}: consult fellow ${fri} was assigned a weekend`);
+      }
+      if (fri === pcicuByMonth[month]) {
+        pcicuWeekendErrors.push(`${dateStr}: PCICU fellow ${fri} was assigned a weekend`);
       }
     }
 
@@ -960,6 +986,47 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
     holidayCounts[item.fellow] = (holidayCounts[item.fellow] || 0) + 1;
   });
 
+  weekendAssignments
+    .sort((a, b) => moment(a.start, DATE_FMT).valueOf() - moment(b.start, DATE_FMT).valueOf())
+    .forEach((assignment, index, list) => {
+      if (index === 0) return;
+      const previous = list[index - 1];
+      if (previous.fellow === assignment.fellow) {
+        consecutiveWeekendErrors.push(
+          `${assignment.fellow} worked consecutive weekends starting ${previous.start} and ${assignment.start}`,
+        );
+      }
+    });
+
+  const scheduleByDate = [...schedule].sort(
+    (a, b) => moment(a.date, DATE_FMT).valueOf() - moment(b.date, DATE_FMT).valueOf(),
+  );
+  for (let i = 0; i < scheduleByDate.length - 1; i += 1) {
+    const current = scheduleByDate[i];
+    const next = scheduleByDate[i + 1];
+    const currentMoment = moment(current.date, DATE_FMT);
+    const nextMoment = moment(next.date, DATE_FMT);
+    if (nextMoment.diff(currentMoment, "days") !== 1) continue;
+    if (current.fellow !== next.fellow) continue;
+
+    const currentBlock = blockStartByDate[current.date];
+    const nextBlock = blockStartByDate[next.date];
+    if (currentBlock && currentBlock === nextBlock) continue;
+
+    const month = currentMoment.format("YYYY-MM");
+    const isAllowedConsultException =
+      currentMoment.day() === 1
+      && nextMoment.day() === 2
+      && exceptionMonthSet.has(month)
+      && current.fellow === consultByMonth[month];
+
+    if (!isAllowedConsultException) {
+      consecutiveCallErrors.push(
+        `${current.fellow} worked consecutive call days on ${current.date} and ${next.date}`,
+      );
+    }
+  }
+
   checks.push({
     ok: missing.length === 0,
     label: "Coverage",
@@ -981,9 +1048,28 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
     detail: weekendErrors.length === 0 ? "All Friday-Sunday blocks stay together." : weekendErrors.slice(0, 3).join(" | "),
   });
   checks.push({
+    ok: consecutiveWeekendErrors.length === 0,
+    label: "Consecutive weekends",
+    detail: consecutiveWeekendErrors.length === 0
+      ? "No fellow is assigned to back-to-back weekends."
+      : consecutiveWeekendErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
+    ok: consecutiveCallErrors.length === 0,
+    label: "Consecutive call days",
+    detail: consecutiveCallErrors.length === 0
+      ? "No fellow is assigned to back-to-back call days outside allowed blocks."
+      : consecutiveCallErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
     ok: consultWeekendErrors.length === 0,
     label: "Consult weekends",
     detail: consultWeekendErrors.length === 0 ? "Consult fellows are excluded from weekend call." : consultWeekendErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
+    ok: pcicuWeekendErrors.length === 0,
+    label: "PCICU weekends",
+    detail: pcicuWeekendErrors.length === 0 ? "PCICU fellows are excluded from weekend call in their PCICU month." : pcicuWeekendErrors.slice(0, 3).join(" | "),
   });
   checks.push({
     ok: thursdayWeekendErrors.length === 0,
@@ -1324,15 +1410,14 @@ export default function App() {
   const events = schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
     const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === item.fellow);
-    const isMonday = date.day() === 1;
     return {
       title: item.fellow,
       start: date.toDate(),
       end: date.toDate(),
       allDay: true,
       resource: {
-        color: isMonday ? CONSULT_COLOR : fellowColor(fellowIndex),
-        textColor: isMonday ? "#2f3b4a" : "#fff",
+        color: fellowColor(fellowIndex),
+        textColor: "#fff",
       },
     };
   });
