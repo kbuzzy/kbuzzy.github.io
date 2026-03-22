@@ -23,6 +23,11 @@ const ROTATION_LABELS = {
   achd_ep: "ACHD/EP",
   pcicu: "PCICU",
 };
+const PGY_ROTATION_TARGETS = {
+  "PGY-1": { consult: 3, pcicu: 1, cath: 4, imaging: 3, research: 1, achd_ep: 0 },
+  "PGY-2": { consult: 2, pcicu: 1, cath: 1, imaging: 3, research: 4, achd_ep: 1 },
+  "PGY-3": { consult: 1, pcicu: 1, cath: 1, imaging: 1, research: 7, achd_ep: 1 },
+};
 const HOLIDAY_WEEKENDS = [
   { label: "July 4", start: "07/03/2026", end: "07/06/2026" },
   { label: "Labor Day", start: "09/04/2026", end: "09/07/2026" },
@@ -784,10 +789,16 @@ function RulesValidationTab({ checks, error }) {
       title: "Current Validation Checks",
       items: [
         "Daily coverage across the full academic year",
+        "Exactly one monthly rotation per fellow",
+        "Monthly consult/cath/PCICU/ACHD-EP slot counts",
+        "PGY-based annual rotation quota checks",
+        "Both PGY-1 fellows on imaging in July 2026",
+        "No repeated non-research rotations in back-to-back months",
         "No fellow has more than two consecutive research months",
         "Monday consult assignments",
         "Tuesday PCICU/consult exception-month rule using the selected 6 PICU-covered months",
         "Weekend and holiday block integrity",
+        "No back-to-back call days outside weekend blocks and the consult Monday-Tuesday exception",
         "No consecutive weekend assignments for any fellow",
         "Consult-fellow exclusion from weekend call",
         "PCICU-fellow exclusion from weekend call",
@@ -850,7 +861,7 @@ function RulesValidationTab({ checks, error }) {
   );
 }
 
-function buildValidation(schedule, rotations, holidayWeekends, start, end, exceptionMonths) {
+function buildValidation(schedule, rotations, holidayWeekends, start, end, exceptionMonths, roster) {
   if (!schedule.length) return [];
 
   const byDate = {};
@@ -859,15 +870,24 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
   const pcicuByMonth = {};
   const cathByMonth = {};
   const rotationByFellowMonth = {};
+  const rotationCountByFellowMonth = {};
+  const rotationCountByMonthType = {};
   rotations.forEach((item) => {
     if (item.rotation === "consult") consultByMonth[item.month] = item.fellow;
     if (item.rotation === "pcicu") pcicuByMonth[item.month] = item.fellow;
     if (item.rotation === "cath") cathByMonth[item.month] = item.fellow;
     rotationByFellowMonth[`${item.fellow}::${item.month}`] = item.rotation;
+    rotationCountByFellowMonth[`${item.fellow}::${item.month}`] = (rotationCountByFellowMonth[`${item.fellow}::${item.month}`] || 0) + 1;
+    rotationCountByMonthType[`${item.month}::${item.rotation}`] = (rotationCountByMonthType[`${item.month}::${item.rotation}`] || 0) + 1;
   });
 
   const checks = [];
   const missing = [];
+  const rotationCoverageErrors = [];
+  const slotCountErrors = [];
+  const julyImagingErrors = [];
+  const rotationQuotaErrors = [];
+  const consecutiveRotationErrors = [];
   const researchRunErrors = [];
   const mondayErrors = [];
   const tuesdayErrors = [];
@@ -905,22 +925,113 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
     monthCursor.add(1, "month");
   }
 
-  Object.keys(rotationByFellowMonth)
-    .map((key) => key.split("::")[0])
-    .filter((fellow, index, list) => list.indexOf(fellow) === index)
-    .forEach((fellow) => {
-      let runLength = 0;
-      monthKeys.forEach((month) => {
-        if (rotationByFellowMonth[`${fellow}::${month}`] === "research") {
-          runLength += 1;
-          if (runLength > 2) {
-            researchRunErrors.push(`${fellow} has more than two consecutive research months ending in ${month}`);
-          }
-        } else {
-          runLength = 0;
+  const fellows = roster?.map((item) => item.name.trim()).filter(Boolean)
+    || Object.keys(rotationByFellowMonth)
+      .map((key) => key.split("::")[0])
+      .filter((fellow, index, list) => list.indexOf(fellow) === index);
+
+  fellows.forEach((fellow) => {
+    const counts = {};
+    monthKeys.forEach((month) => {
+      const key = `${fellow}::${month}`;
+      const rotationName = rotationByFellowMonth[key];
+      const monthCount = rotationCountByFellowMonth[key] || 0;
+      if (monthCount !== 1) {
+        rotationCoverageErrors.push(`${fellow} has ${monthCount} rotations in ${month}`);
+      }
+      if (rotationName) {
+        counts[rotationName] = (counts[rotationName] || 0) + 1;
+      }
+      if (month === "2026-07") {
+        const fellowRecord = roster?.find((item) => item.name.trim() === fellow);
+        if (fellowRecord?.pgy === "PGY-1" && rotationName !== "imaging") {
+          julyImagingErrors.push(`${fellow} should be on imaging in 2026-07, got ${rotationName || "none"}`);
+        }
+      }
+    });
+
+    const fellowRecord = roster?.find((item) => item.name.trim() === fellow);
+    if (fellowRecord?.pgy && PGY_ROTATION_TARGETS[fellowRecord.pgy]) {
+      Object.entries(PGY_ROTATION_TARGETS[fellowRecord.pgy]).forEach(([rotationName, expected]) => {
+        const actual = counts[rotationName] || 0;
+        if (actual !== expected) {
+          rotationQuotaErrors.push(`${fellow} has ${actual} ${rotationName} months, expected ${expected}`);
         }
       });
+    }
+
+    monthKeys.forEach((month, index) => {
+      if (index === 0) return;
+      const currentRotation = rotationByFellowMonth[`${fellow}::${month}`];
+      const previousRotation = rotationByFellowMonth[`${fellow}::${monthKeys[index - 1]}`];
+      if (currentRotation && currentRotation === previousRotation && currentRotation !== "research") {
+        consecutiveRotationErrors.push(`${fellow} repeated ${currentRotation} in ${monthKeys[index - 1]} and ${month}`);
+      }
     });
+
+    let runLength = 0;
+    monthKeys.forEach((month) => {
+      if (rotationByFellowMonth[`${fellow}::${month}`] === "research") {
+        runLength += 1;
+        if (runLength > 2) {
+          researchRunErrors.push(`${fellow} has more than two consecutive research months ending in ${month}`);
+        }
+      } else {
+        runLength = 0;
+      }
+    });
+  });
+
+  monthKeys.forEach((month) => {
+    const consultCount = rotationCountByMonthType[`${month}::consult`] || 0;
+    const cathCount = rotationCountByMonthType[`${month}::cath`] || 0;
+    const pcicuCount = rotationCountByMonthType[`${month}::pcicu`] || 0;
+    const achdCount = rotationCountByMonthType[`${month}::achd_ep`] || 0;
+    const expectedPcicu = exceptionMonthSet.has(month) ? 0 : 1;
+
+    if (consultCount !== 1) slotCountErrors.push(`${month} has ${consultCount} consult fellows`);
+    if (cathCount !== 1) slotCountErrors.push(`${month} has ${cathCount} cath fellows`);
+    if (pcicuCount !== expectedPcicu) slotCountErrors.push(`${month} has ${pcicuCount} PCICU fellows, expected ${expectedPcicu}`);
+    if (achdCount > 1) slotCountErrors.push(`${month} has ${achdCount} ACHD/EP fellows`);
+  });
+
+  const uniqueSlotErrors = slotCountErrors.filter((item, index, list) => list.indexOf(item) === index);
+
+  checks.push({
+    ok: rotationCoverageErrors.length === 0,
+    label: "Monthly rotation coverage",
+    detail: rotationCoverageErrors.length === 0
+      ? "Every fellow has exactly one rotation in each month."
+      : rotationCoverageErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
+    ok: uniqueSlotErrors.length === 0,
+    label: "Rotation slot counts",
+    detail: uniqueSlotErrors.length === 0
+      ? "Monthly consult, cath, PCICU, and ACHD/EP slot counts are valid."
+      : uniqueSlotErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
+    ok: julyImagingErrors.length === 0,
+    label: "July PGY-1 imaging",
+    detail: julyImagingErrors.length === 0
+      ? "Both first-year fellows are on imaging in July 2026."
+      : julyImagingErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
+    ok: rotationQuotaErrors.length === 0,
+    label: "Rotation quotas",
+    detail: rotationQuotaErrors.length === 0
+      ? "Each fellow matches the required PGY rotation totals."
+      : rotationQuotaErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
+    ok: consecutiveRotationErrors.length === 0,
+    label: "Consecutive non-research rotations",
+    detail: consecutiveRotationErrors.length === 0
+      ? "No fellow repeats a non-research rotation in back-to-back months."
+      : consecutiveRotationErrors.slice(0, 3).join(" | "),
+  });
 
   while (cur.isSameOrBefore(endDate)) {
     const dateStr = cur.format(DATE_FMT);
@@ -1263,6 +1374,24 @@ export default function App() {
     };
   }, [apiConfigured, checkBackend]);
 
+  useEffect(() => {
+    if (!schedule.length) {
+      setValidation([]);
+      return;
+    }
+    setValidation(
+      buildValidation(
+        schedule,
+        rotations,
+        holidayWeekends,
+        start,
+        end,
+        pcicuExceptionMonths,
+        roster,
+      ),
+    );
+  }, [end, holidayWeekends, pcicuExceptionMonths, roster, rotations, schedule, start]);
+
   const generateSchedule = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -1330,6 +1459,7 @@ export default function App() {
           start,
           end,
           pcicuExceptionMonths,
+          roster,
         ),
       );
     } catch (err) {
@@ -1400,6 +1530,7 @@ export default function App() {
         start,
         end,
         randomExceptionMonths,
+        roster,
       );
       const csv = exportMonthlyCSV(data.schedule || [], start, end, { download: false });
       const hasValidation = nextValidation.length > 0;
