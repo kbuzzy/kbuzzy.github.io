@@ -10,6 +10,9 @@ MAX_SOLVER_SECONDS = 60
 OCTOBER_BOARD_WEIGHT = 10
 CATH_THURSDAY_WEIGHT = 2
 DIFFICULT_ROTATION_STREAK_WEIGHT = 3
+IN_HOUSE_RANGE_WEIGHT = 60
+IN_HOUSE_PAIRWISE_WEIGHT = 8
+TOTAL_CALL_RANGE_WEIGHT = 5
 PGY_PREFERENCE_WEIGHTS = {"PGY-1": 1, "PGY-2": 2, "PGY-3": 3}
 
 # The solver is intentionally scoped to one academic year so the quota
@@ -503,8 +506,36 @@ def generate_schedule(
             model.add(hard_run >= hard_month[(f, m)] + hard_month[(f, m + 1)] + hard_month[(f, m + 2)] - 2)
             soft_terms.append(-DIFFICULT_ROTATION_STREAK_WEIGHT * hard_run)
 
-    # The final objective blends preference rewards with a small fairness term
-    # so total call burden does not drift too far between fellows.
+    # In-house calls are the most fatigue-heavy recurring burden in the model,
+    # so fairness optimization prioritizes those counts before overall totals.
+    in_house_days = []
+    for d in range(days):
+        date = start_date + timedelta(days=d)
+        month = month_dates[d]
+        dow = date.weekday()
+        if d in covered_block_days:
+            continue
+        if dow == 1 and month not in exception_tuesday_months:
+            in_house_days.append(d)
+        elif dow in (2, 3):
+            in_house_days.append(d)
+
+    in_house_counts = [sum(call[(f, d)] for d in in_house_days) for f in range(n)]
+    max_in_house = model.new_int_var(0, len(in_house_days), "max_in_house")
+    min_in_house = model.new_int_var(0, len(in_house_days), "min_in_house")
+    for total in in_house_counts:
+        model.add(total <= max_in_house)
+        model.add(total >= min_in_house)
+
+    in_house_pairwise_spread = []
+    for left in range(n):
+        for right in range(left + 1, n):
+            diff = model.new_int_var(0, len(in_house_days), f"in_house_diff_{left}_{right}")
+            model.add_abs_equality(diff, in_house_counts[left] - in_house_counts[right])
+            in_house_pairwise_spread.append(diff)
+
+    # Total call fairness still matters, but it is secondary to keeping the
+    # in-house weekday burden from drifting toward the senior fellows.
     total_counts = [sum(call[(f, d)] for d in range(days)) for f in range(n)]
     max_total = model.new_int_var(0, days, "max_total")
     min_total = model.new_int_var(0, days, "min_total")
@@ -512,7 +543,12 @@ def generate_schedule(
         model.add(total <= max_total)
         model.add(total >= min_total)
 
-    objective = sum(soft_terms) * 100 - (max_total - min_total)
+    objective = (
+        sum(soft_terms) * 100
+        - IN_HOUSE_RANGE_WEIGHT * (max_in_house - min_in_house)
+        - IN_HOUSE_PAIRWISE_WEIGHT * sum(in_house_pairwise_spread)
+        - TOTAL_CALL_RANGE_WEIGHT * (max_total - min_total)
+    )
     model.maximize(objective)
 
     solver = cp_model.CpSolver()
