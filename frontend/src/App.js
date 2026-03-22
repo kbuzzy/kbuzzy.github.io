@@ -202,6 +202,18 @@ function buildMajorHolidayRows(majorHolidayAssignments) {
   ]);
 }
 
+function serializeMajorHolidayBlocks(blocks) {
+  return Object.fromEntries(
+    Object.entries(blocks).map(([holiday, halves]) => [
+      holiday,
+      halves.map((half) => ({
+        start: moment(half.start, DATE_FMT).format("YYYY-MM-DD"),
+        end: moment(half.end, DATE_FMT).format("YYYY-MM-DD"),
+      })),
+    ]),
+  );
+}
+
 function expandWeekRanges(ranges) {
   const dates = [];
   for (const { from, to } of ranges) {
@@ -1972,17 +1984,17 @@ export default function App() {
               holidayPreferences[fellow.id],
             ]),
           ),
-          major_holiday_blocks: majorHolidayBlocks,
+          major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
           pcicu_exception_months: pcicuExceptionMonths,
         }),
       });
+      setBackendStatus("connected");
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.detail || `Server error: ${response.status}`);
       }
       const data = await response.json();
-      setBackendStatus("connected");
       setSchedule(data.schedule || []);
       setRotations(data.rotations || []);
       setHolidayWeekends(data.holiday_weekends || []);
@@ -2001,7 +2013,9 @@ export default function App() {
         ),
       );
     } catch (err) {
-      setBackendStatus("error");
+      if (err instanceof TypeError) {
+        setBackendStatus("error");
+      }
       setError(err.message || "Unknown error");
     } finally {
       setLoading(false);
@@ -2052,10 +2066,11 @@ export default function App() {
           holiday_preferences: Object.fromEntries(
             roster.map((fellow) => [fellow.name.trim(), randomPreferences[fellow.id]]),
           ),
-          major_holiday_blocks: majorHolidayBlocks,
+          major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
           pcicu_exception_months: randomExceptionMonths,
         }),
       });
+      setBackendStatus("connected");
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
@@ -2114,7 +2129,9 @@ export default function App() {
         ],
       });
     } catch (err) {
-      setBackendStatus("error");
+      if (err instanceof TypeError) {
+        setBackendStatus("error");
+      }
       setError(err.message || "Unknown error");
       setTestResult({
         ok: false,
