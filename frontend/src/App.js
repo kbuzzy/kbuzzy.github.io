@@ -120,7 +120,8 @@ function readStoredState() {
   }
 }
 
-function exportMonthlyCSV(schedule, startStr, endStr) {
+function exportMonthlyCSV(schedule, startStr, endStr, options = {}) {
+  const { download = true } = options;
   const byDate = {};
   for (const item of schedule) byDate[item.date] = item.fellow;
 
@@ -160,6 +161,9 @@ function exportMonthlyCSV(schedule, startStr, endStr) {
   const csv = rows
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n");
+  if (!download) {
+    return csv;
+  }
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -167,6 +171,53 @@ function exportMonthlyCSV(schedule, startStr, endStr) {
   a.download = "call_schedule_monthly.csv";
   a.click();
   URL.revokeObjectURL(url);
+  return csv;
+}
+
+function shuffle(list) {
+  const next = [...list];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+function sample(list, count) {
+  return shuffle(list).slice(0, count);
+}
+
+function randomVacationWeeks(months) {
+  const selectedMonths = sample(months, MAX_VACATION_WEEKS);
+  return selectedMonths.map((month) => {
+    const monthStart = moment(`${month.key}-01`, "YYYY-MM-DD").startOf("month");
+    let monday = monthStart.clone().startOf("isoWeek");
+    if (monday.month() !== monthStart.month()) {
+      monday = monday.add(1, "week");
+    }
+    const possible = [];
+    while (monday.month() === monthStart.month()) {
+      possible.push(monday.clone());
+      monday = monday.add(1, "week");
+    }
+    const chosen = possible[Math.floor(Math.random() * possible.length)];
+    return {
+      from: chosen.format(DATE_FMT),
+      to: chosen.clone().add(4, "days").format(DATE_FMT),
+    };
+  });
+}
+
+function createRandomPreferenceState(roster) {
+  return Object.fromEntries(
+    roster.map((fellow) => [
+      fellow.id,
+      {
+        majorHolidays: shuffle(MAJOR_HOLIDAYS),
+        holidayWeekends: shuffle(HOLIDAY_WEEKEND_OPTIONS),
+      },
+    ]),
+  );
 }
 
 function BoardExamEditor({ roster, boardExamIds, onToggle }) {
@@ -648,6 +699,34 @@ function ValidationPanel({ checks }) {
   );
 }
 
+function TestResultPanel({ result }) {
+  if (!result) return null;
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "12px 14px",
+        borderRadius: 8,
+        border: "1px solid #dee2e6",
+        background: result.ok ? "#d4edda" : "#fde8e8",
+        color: result.ok ? "#155724" : "#c0392b",
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>
+        Run Random Test: {result.ok ? "Passed" : "Failed"}
+      </div>
+      <div style={{ fontSize: 14 }}>{result.message}</div>
+      {result.details?.length > 0 && (
+        <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 18 }}>
+          {result.details.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function RulesValidationTab({ checks, error }) {
   const sections = [
     {
@@ -983,6 +1062,7 @@ export default function App() {
   const [validation, setValidation] = useState(storedState?.validation || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [testResult, setTestResult] = useState(storedState?.testResult || null);
   const [calendarDate, setCalendarDate] = useState(() => moment("07/01/2026", DATE_FMT).toDate());
   const [activeTab, setActiveTab] = useState("scheduler");
   const [backendStatus, setBackendStatus] = useState(API_URL ? "checking" : "unconfigured");
@@ -1020,6 +1100,7 @@ export default function App() {
         rotations,
         holidayWeekends,
         validation,
+        testResult,
       }),
     );
   }, [
@@ -1032,6 +1113,7 @@ export default function App() {
     rotations,
     schedule,
     start,
+    testResult,
     vacations,
     validation,
   ]);
@@ -1064,6 +1146,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     setValidation([]);
+    setTestResult(null);
 
     const names = roster.map((fellow) => fellow.name.trim());
     if (names.some((name) => !name)) {
@@ -1136,6 +1219,108 @@ export default function App() {
     }
   }, [boardExamIds, holidayPreferences, pcicuExceptionMonths, roster, start, end, vacations]);
 
+  const runRandomTest = useCallback(async () => {
+    if (!apiConfigured) return;
+
+    setLoading(true);
+    setError(null);
+    setTestResult(null);
+
+    const randomVacations = Object.fromEntries(
+      roster.map((fellow) => [fellow.id, randomVacationWeeks(months)]),
+    );
+    const randomBoardExamIds = sample(
+      roster.map((fellow) => fellow.id),
+      Math.floor(Math.random() * (roster.length + 1)),
+    );
+    const randomExceptionMonths = sample(months.map((month) => month.key), 6).sort();
+    const randomPreferences = createRandomPreferenceState(roster);
+
+    setVacations(randomVacations);
+    setBoardExamIds(randomBoardExamIds);
+    setPcicuExceptionMonths(randomExceptionMonths);
+    setHolidayPreferences(randomPreferences);
+
+    const names = roster.map((fellow) => fellow.name.trim());
+
+    try {
+      const response = await fetch(`${API_URL}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fellows: names,
+          start,
+          end,
+          vacations: Object.fromEntries(
+            roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(randomVacations[fellow.id] || [])]),
+          ),
+          holidays: {},
+          pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
+          board_exam_fellows: roster
+            .filter((fellow) => randomBoardExamIds.includes(fellow.id))
+            .map((fellow) => fellow.name.trim()),
+          holiday_preferences: Object.fromEntries(
+            roster.map((fellow) => [fellow.name.trim(), randomPreferences[fellow.id]]),
+          ),
+          pcicu_exception_months: randomExceptionMonths,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const nextValidation = buildValidation(
+        data.schedule || [],
+        data.rotations || [],
+        data.holiday_weekends || [],
+        start,
+        end,
+        randomExceptionMonths,
+      );
+      const csv = exportMonthlyCSV(data.schedule || [], start, end, { download: false });
+      const hasValidation = nextValidation.length > 0;
+      const hasEvents = (data.schedule || []).length > 0;
+      const exportWorked = typeof csv === "string" && csv.includes("July 2026");
+      const validationPassed = nextValidation.every((check) => check.ok);
+
+      setBackendStatus("connected");
+      setSchedule(data.schedule || []);
+      setRotations(data.rotations || []);
+      setHolidayWeekends(data.holiday_weekends || []);
+      setCalendarDate(moment(start, DATE_FMT).toDate());
+      setValidation(nextValidation);
+      setActiveTab("calendar");
+
+      const ok = hasValidation && hasEvents && exportWorked && validationPassed;
+      setTestResult({
+        ok,
+        message: ok
+          ? "Random scheduling request succeeded, validation checks passed, calendar data rendered, and CSV export generation worked."
+          : "Random scheduling request completed, but one or more smoke-test checks failed.",
+        details: [
+          `Schedule days returned: ${(data.schedule || []).length}`,
+          `Rotation assignments returned: ${(data.rotations || []).length}`,
+          `Validation checks: ${nextValidation.length}`,
+          `CSV export generation: ${exportWorked ? "ok" : "failed"}`,
+          `Validation result: ${validationPassed ? "all checks passed" : "one or more checks failed"}`,
+        ],
+      });
+    } catch (err) {
+      setBackendStatus("error");
+      setError(err.message || "Unknown error");
+      setTestResult({
+        ok: false,
+        message: "Random test could not complete.",
+        details: [err.message || "Unknown error"],
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [apiConfigured, months, roster, start, end]);
+
   const events = schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
     const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === item.fellow);
@@ -1189,6 +1374,7 @@ export default function App() {
       {activeTab === "scheduler" ? (
         <>
           <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
+          <TestResultPanel result={testResult} />
           <div style={{ background: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <RosterEditor
               roster={roster}
@@ -1254,6 +1440,13 @@ export default function App() {
               <button onClick={generateSchedule} disabled={loading || !apiConfigured} style={{ ...btnStyle, opacity: loading || !apiConfigured ? 0.6 : 1 }}>
                 {loading ? "Generating..." : "Generate schedule"}
               </button>
+              <button
+                onClick={runRandomTest}
+                disabled={loading || !apiConfigured}
+                style={{ ...btnStyle, background: "#6f42c1", opacity: loading || !apiConfigured ? 0.6 : 1 }}
+              >
+                Run Random Test
+              </button>
               {schedule.length > 0 && (
                 <button onClick={() => exportMonthlyCSV(schedule, start, end)} style={{ ...btnStyle, background: "#2ca02c" }}>
                   Export monthly CSV
@@ -1285,6 +1478,7 @@ export default function App() {
         ) : (
           <>
             <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
+            <TestResultPanel result={testResult} />
             <ValidationPanel checks={validation} />
             <RotationTable roster={roster} rotations={rotations} months={months} />
             <HolidayWeekendTable holidayWeekends={holidayWeekends} />
