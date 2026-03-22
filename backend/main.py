@@ -35,6 +35,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 class ScheduleRequest(BaseModel):
+    # This schema mirrors the frontend payload closely so invalid schedule
+    # setups can be rejected before they reach the OR-Tools model.
     fellows: list[str]
     start: str
     end: str
@@ -43,6 +45,7 @@ class ScheduleRequest(BaseModel):
     pgy_years: dict[str, str]
     board_exam_fellows: Optional[list[str]] = []
     holiday_preferences: dict[str, dict[str, list[str]]]
+    major_holiday_blocks: Optional[dict[str, list[dict[str, str]]]] = None
     pcicu_exception_months: list[str]
 
     @field_validator("fellows")
@@ -101,6 +104,8 @@ def root() -> dict:
 
 @app.post("/schedule")
 def create_schedule(req: ScheduleRequest) -> dict:
+    # Route-level validation covers malformed requests and mismatched roster
+    # metadata; deeper feasibility rules are enforced inside `generate_schedule`.
     start = parse_date(req.start)
     end = parse_date(req.end)
 
@@ -156,6 +161,7 @@ def create_schedule(req: ScheduleRequest) -> dict:
             req.pgy_years,
             req.board_exam_fellows,
             req.holiday_preferences,
+            req.major_holiday_blocks,
             req.pcicu_exception_months,
         )
     except Exception as exc:

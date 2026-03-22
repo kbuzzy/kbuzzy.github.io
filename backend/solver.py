@@ -9,8 +9,11 @@ from ortools.sat.python import cp_model
 MAX_SOLVER_SECONDS = 60
 OCTOBER_BOARD_WEIGHT = 10
 CATH_THURSDAY_WEIGHT = 2
+DIFFICULT_ROTATION_STREAK_WEIGHT = 3
 PGY_PREFERENCE_WEIGHTS = {"PGY-1": 1, "PGY-2": 2, "PGY-3": 3}
 
+# The solver is intentionally scoped to one academic year so the quota
+# checks, holiday windows, and monthly rotation counts stay deterministic.
 MONTH_KEYS = [
     "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12",
     "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06",
@@ -64,11 +67,23 @@ HOLIDAY_WEEKENDS = {
         "holiday_date": "2027-06-19",
     },
 }
-MAJOR_HOLIDAYS = {
-    "Thanksgiving": "2026-11-26",
-    "Christmas": "2026-12-25",
-    "New Year's": "2027-01-01",
+DEFAULT_MAJOR_HOLIDAYS = {
+    "Thanksgiving": [
+        {"label": "Thanksgiving A", "start": "2026-11-25", "end": "2026-11-26"},
+        {"label": "Thanksgiving B", "start": "2026-11-27", "end": "2026-11-29"},
+    ],
+    "Christmas": [
+        {"label": "Christmas A", "start": "2026-12-22", "end": "2026-12-24"},
+        {"label": "Christmas B", "start": "2026-12-25", "end": "2026-12-27"},
+    ],
+    "New Year's": [
+        {"label": "New Year's A", "start": "2026-12-28", "end": "2026-12-30"},
+        {"label": "New Year's B", "start": "2026-12-31", "end": "2027-01-03"},
+    ],
 }
+# These rotations are still allowed to repeat, but the objective penalizes
+# runs longer than two months to keep the final schedule more balanced.
+DIFFICULT_ROTATIONS = ("consult", "cath", "pcicu")
 
 
 def _idx(date: datetime, start: datetime) -> int:
@@ -83,6 +98,41 @@ def _parse_iso(date_str: str) -> datetime:
     return datetime.strptime(date_str, "%Y-%m-%d")
 
 
+def _normalize_major_holidays(major_holiday_blocks: dict | None) -> dict[str, list[dict[str, str]]]:
+    # The frontend can edit major-holiday date windows, but the backend keeps
+    # the holiday names/half labels stable so downstream validation and exports
+    # always have predictable identifiers.
+    major_holidays = major_holiday_blocks or DEFAULT_MAJOR_HOLIDAYS
+    expected = set(DEFAULT_MAJOR_HOLIDAYS)
+    if set(major_holidays) != expected:
+        raise ValueError("major_holiday_blocks must include Thanksgiving, Christmas, and New Year's")
+
+    normalized: dict[str, list[dict[str, str]]] = {}
+    for holiday, default_halves in DEFAULT_MAJOR_HOLIDAYS.items():
+        halves = major_holidays.get(holiday, [])
+        if len(halves) != 2:
+            raise ValueError(f"{holiday} must define exactly two holiday halves")
+        normalized_halves = []
+        for idx, half in enumerate(halves):
+            start = half.get("start")
+            end = half.get("end")
+            if not start or not end:
+                raise ValueError(f"{holiday} holiday halves must include start and end dates")
+            start_dt = _parse_iso(start)
+            end_dt = _parse_iso(end)
+            if end_dt < start_dt:
+                raise ValueError(f"{holiday} holiday half end must be on or after the start date")
+            normalized_halves.append(
+                {
+                    "label": default_halves[idx]["label"],
+                    "start": start_dt.strftime("%Y-%m-%d"),
+                    "end": end_dt.strftime("%Y-%m-%d"),
+                }
+            )
+        normalized[holiday] = normalized_halves
+    return normalized
+
+
 def generate_schedule(
     fellows: list[str],
     start_date: datetime,
@@ -92,6 +142,7 @@ def generate_schedule(
     pgy_years: dict[str, str],
     board_exam_fellows: list[str],
     holiday_preferences: dict[str, dict[str, list[str]]],
+    major_holiday_blocks: dict | None,
     pcicu_exception_months: list[str],
 ) -> dict:
     del holidays
@@ -121,7 +172,8 @@ def generate_schedule(
         if pgy_counts[pgy] != required:
             raise ValueError("the roster must include exactly two fellows in each of PGY-1, PGY-2, and PGY-3")
 
-    expected_major = set(MAJOR_HOLIDAYS)
+    major_holidays = _normalize_major_holidays(major_holiday_blocks)
+    expected_major = set(major_holidays)
     expected_weekends = {info["label"] for info in HOLIDAY_WEEKENDS.values()}
     for fellow in fellows:
         prefs = holiday_preferences.get(fellow)
@@ -145,6 +197,9 @@ def generate_schedule(
     month_dates = [_month_key(start_date + timedelta(days=d)) for d in range(days)]
 
     model = cp_model.CpModel()
+    # `rotation` is the monthly daytime assignment grid; `call` is the daily
+    # overnight call grid. The model solves both together so call rules can
+    # depend on who is on consult/PCICU/cath in a given month.
     rotation = {
         (f, m, r): model.new_bool_var(f"rot_{fellows[f]}_{MONTH_KEYS[m]}_{ROTATIONS[r]}")
         for f in range(n)
@@ -199,11 +254,23 @@ def generate_schedule(
                 <= 2
             )
 
+    hard_month = {}
+    for f in range(n):
+        for m in range(len(MONTH_KEYS)):
+            hard_month[(f, m)] = model.new_bool_var(f"hard_month_{f}_{m}")
+            difficult_sum = sum(rotation[(f, m, rotation_index[name])] for name in DIFFICULT_ROTATIONS)
+            model.add(hard_month[(f, m)] == difficult_sum)
+
     block_starts: list[int] = []
     block_days_by_start: dict[int, list[int]] = {}
     holiday_block_starts: set[int] = set()
+    weekend_block_starts: set[int] = set()
+    major_block_starts: set[int] = set()
     covered_block_days: set[int] = set()
+    major_half_info: list[dict] = []
 
+    # `block_starts` tracks every multi-day call block that must stay with one
+    # fellow: holiday weekends, standard weekends, and major-holiday halves.
     for start_iso, info in HOLIDAY_WEEKENDS.items():
         start_dt = _parse_iso(start_iso)
         end_dt = _parse_iso(info["end"])
@@ -213,7 +280,38 @@ def generate_schedule(
         block_starts.append(start_idx)
         block_days_by_start[start_idx] = days_in_block
         holiday_block_starts.add(start_idx)
+        weekend_block_starts.add(start_idx)
         covered_block_days.update(days_in_block)
+
+    # Only the major-holiday halves that include an actual Friday count toward
+    # the weekend quota requirement.
+    weekend_credit_major_starts: set[int] = set()
+    for holiday_label, halves in major_holidays.items():
+        for half in halves:
+            start_dt = _parse_iso(half["start"])
+            end_dt = _parse_iso(half["end"])
+            if start_dt < start_date or end_dt > end_date:
+                raise ValueError(f"{holiday_label} holiday halves must fall within the academic year window")
+            start_idx = _idx(start_dt, start_date)
+            end_idx = _idx(end_dt, start_date)
+            days_in_block = list(range(start_idx, end_idx + 1))
+            if any(day_idx in covered_block_days for day_idx in days_in_block):
+                raise ValueError(f"{holiday_label} holiday halves overlap another reserved holiday block")
+            block_starts.append(start_idx)
+            block_days_by_start[start_idx] = days_in_block
+            major_block_starts.add(start_idx)
+            covered_block_days.update(days_in_block)
+            if any((start_date + timedelta(days=day_idx)).weekday() == 4 for day_idx in days_in_block):
+                weekend_credit_major_starts.add(start_idx)
+            major_half_info.append(
+                {
+                    "holiday": holiday_label,
+                    "label": half["label"],
+                    "start": half["start"],
+                    "end": half["end"],
+                    "start_idx": start_idx,
+                }
+            )
 
     for d in range(days):
         date = start_date + timedelta(days=d)
@@ -224,20 +322,25 @@ def generate_schedule(
         days_in_block = [d, d + 1, d + 2]
         block_starts.append(d)
         block_days_by_start[d] = days_in_block
+        weekend_block_starts.add(d)
         covered_block_days.update(days_in_block)
 
-    if len(block_starts) != 52:
-        raise ValueError("expected exactly 52 weekend call blocks in the academic year window")
+    if len(weekend_block_starts) != 49:
+        raise ValueError("expected exactly 49 weekend call blocks after carving out major holiday halves")
+    if len(major_half_info) != 6:
+        raise ValueError("expected exactly 6 major holiday half-blocks in the academic year window")
+    if len(weekend_block_starts) + len(weekend_credit_major_starts) != sum(PGY_WEEKEND_TARGETS[pgy] * REQUIRED_PGY_COUNTS[pgy] for pgy in REQUIRED_PGY_COUNTS):
+        raise ValueError("weekend coverage implied by the configured major holiday halves does not match the required annual weekend totals")
 
     for start_idx, days_in_block in block_days_by_start.items():
         for later_idx in days_in_block[1:]:
             for f in range(n):
                 model.add(call[(f, start_idx)] == call[(f, later_idx)])
 
-    ordered_block_starts = sorted(block_starts)
-    for i in range(len(ordered_block_starts) - 1):
-        current_start = ordered_block_starts[i]
-        next_start = ordered_block_starts[i + 1]
+    ordered_weekend_starts = sorted(weekend_block_starts.union(weekend_credit_major_starts))
+    for i in range(len(ordered_weekend_starts) - 1):
+        current_start = ordered_weekend_starts[i]
+        next_start = ordered_weekend_starts[i + 1]
         for f in range(n):
             model.add(call[(f, current_start)] + call[(f, next_start)] <= 1)
 
@@ -283,8 +386,11 @@ def generate_schedule(
         m = month_index[month]
         for f in range(n):
             model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["consult"])] <= 1)
-            model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["pcicu"])] <= 1)
+            if start_idx in weekend_block_starts:
+                model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["pcicu"])] <= 1)
 
+    # This map lets the consecutive-call rule distinguish a true back-to-back
+    # assignment from two dates that belong to the same protected call block.
     day_to_block_start = {}
     for start_idx, days_in_block in block_days_by_start.items():
         for day_idx in days_in_block:
@@ -311,8 +417,21 @@ def generate_schedule(
 
     for f, fellow in enumerate(fellows):
         target = PGY_WEEKEND_TARGETS[pgy_years[fellow]]
-        model.add(sum(call[(f, start_idx)] for start_idx in block_starts) == target)
+        model.add(
+            sum(call[(f, start_idx)] for start_idx in weekend_block_starts)
+            + sum(call[(f, start_idx)] for start_idx in weekend_credit_major_starts)
+            == target
+        )
         model.add(sum(call[(f, start_idx)] for start_idx in holiday_block_starts) == 1)
+        model.add(sum(call[(f, info["start_idx"])] for info in major_half_info) == 1)
+
+    for holiday_label, halves in major_holidays.items():
+        holiday_starts = [
+            info["start_idx"]
+            for info in major_half_info
+            if info["holiday"] == holiday_label
+        ]
+        model.add(sum(call[(f, start_idx)] for f in range(n) for start_idx in holiday_starts) == 2)
 
     october_idx = month_index["2026-10"]
     soft_terms = []
@@ -332,9 +451,9 @@ def generate_schedule(
             label: len(prefs["majorHolidays"]) - idx
             for idx, label in enumerate(prefs["majorHolidays"])
         }
-        for label, iso_date in MAJOR_HOLIDAYS.items():
-            idx = _idx(_parse_iso(iso_date), start_date)
-            if 0 <= idx < days:
+        for label, halves in major_holidays.items():
+            for half in halves:
+                idx = _idx(_parse_iso(half["start"]), start_date)
                 soft_terms.append(
                     seniority_weight * major_scores[label] * call[(f, idx)]
                 )
@@ -361,6 +480,17 @@ def generate_schedule(
             model.add(cath_match >= call[(f, d)] + rotation[(f, m, rotation_index["cath"])] - 1)
             soft_terms.append(CATH_THURSDAY_WEIGHT * cath_match)
 
+    for f in range(n):
+        for m in range(len(MONTH_KEYS) - 2):
+            hard_run = model.new_bool_var(f"hard_run_{f}_{m}")
+            model.add(hard_run <= hard_month[(f, m)])
+            model.add(hard_run <= hard_month[(f, m + 1)])
+            model.add(hard_run <= hard_month[(f, m + 2)])
+            model.add(hard_run >= hard_month[(f, m)] + hard_month[(f, m + 1)] + hard_month[(f, m + 2)] - 2)
+            soft_terms.append(-DIFFICULT_ROTATION_STREAK_WEIGHT * hard_run)
+
+    # The final objective blends preference rewards with a small fairness term
+    # so total call burden does not drift too far between fellows.
     total_counts = [sum(call[(f, d)] for d in range(days)) for f in range(n)]
     max_total = model.new_int_var(0, days, "max_total")
     min_total = model.new_int_var(0, days, "min_total")
@@ -408,4 +538,26 @@ def generate_schedule(
             }
         )
 
-    return {"schedule": schedule, "rotations": rotations, "holiday_weekends": holiday_weekends}
+    major_holidays = []
+    for info in major_half_info:
+        assigned_fellow = None
+        for f in range(n):
+            if solver.value(call[(f, info["start_idx"])]) == 1:
+                assigned_fellow = fellows[f]
+                break
+        major_holidays.append(
+            {
+                "holiday": info["holiday"],
+                "label": info["label"],
+                "start": _parse_iso(info["start"]).strftime("%m/%d/%Y"),
+                "end": _parse_iso(info["end"]).strftime("%m/%d/%Y"),
+                "fellow": assigned_fellow,
+            }
+        )
+
+    return {
+        "schedule": schedule,
+        "rotations": rotations,
+        "holiday_weekends": holiday_weekends,
+        "major_holidays": major_holidays,
+    }

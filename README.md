@@ -67,6 +67,7 @@ Each monthly rotation lasts for the entire calendar month.
 - Both first-year fellows must be on `imaging` in `July 2026`.
 - No fellow can repeat the same rotation in consecutive months.
 - `research` is the only exception and may repeat in back-to-back months, but no fellow can have more than 2 research months in a row.
+- Long runs of the harder rotations `consult`, `cath`, and `PCICU` are discouraged, and stretches longer than 2 months are treated as a soft penalty when the solver optimizes.
 - Fellows can optionally be flagged as taking board certification exams in October.
 - For October board exam takers, the solver prefers `imaging` or `research` in `October 2026` when feasible.
 - Each fellow can rank major holidays and holiday weekends from most preferred to work to least preferred to work.
@@ -78,6 +79,12 @@ Call is built after the monthly rotations are assigned.
 
 - Friday-Sunday is one weekend call block.
 - Six holiday weekends are special blocks and each fellow must receive exactly one of them.
+- Each major holiday is split into two halves, and one fellow is assigned to each half.
+- Thanksgiving halves default to `11/25/2026-11/26/2026` and `11/27/2026-11/29/2026`.
+- Christmas halves default to `12/22/2026-12/24/2026` and `12/25/2026-12/27/2026`.
+- New Year's halves default to `12/28/2026-12/30/2026` and `12/31/2026-01/03/2027`.
+- Those major holiday half dates are editable in the UI and are intended to vary year to year.
+- Each fellow is assigned exactly one half of one major holiday per year.
 - The same fellow must cover Friday, Saturday, and Sunday.
 - If the holiday falls on a Friday, that holiday weekend expands to Thursday-Sunday.
 - If the holiday falls between Saturday and Monday, that holiday weekend expands to Friday-Monday.
@@ -178,6 +185,12 @@ Example request:
       "majorHolidays": ["Christmas", "Thanksgiving", "New Year's"],
       "holidayWeekends": ["Labor Day", "MLK Day", "July 4", "Good Friday", "Memorial Day", "Juneteenth"]
     }
+  },
+  "major_holiday_blocks": {
+    "Thanksgiving": [
+      { "start": "2026-11-25", "end": "2026-11-26" },
+      { "start": "2026-11-27", "end": "2026-11-29" }
+    ]
   }
 }
 ```
@@ -196,6 +209,9 @@ Example response shape:
   ],
   "holiday_weekends": [
     { "label": "July 4", "start": "07/03/2026", "end": "07/06/2026", "fellow": "Brooke Jones" }
+  ],
+  "major_holidays": [
+    { "holiday": "Thanksgiving", "label": "Thanksgiving A", "start": "11/25/2026", "end": "11/26/2026", "fellow": "Dana Patel" }
   ]
 }
 ```

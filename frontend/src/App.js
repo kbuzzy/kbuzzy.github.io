@@ -15,6 +15,8 @@ const STORAGE_KEY = "fellowship-scheduler-state-v1";
 const DEFAULT_PCICU_EXCEPTION_MONTHS = ["2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05"];
 
 const PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"];
+// These labels mirror the backend rotation ids so solved results can be
+// rendered directly without an extra translation step.
 const ROTATION_LABELS = {
   consult: "Consult",
   imaging: "Imaging",
@@ -37,10 +39,21 @@ const HOLIDAY_WEEKENDS = [
   { label: "Juneteenth", start: "06/18/2027", end: "06/21/2027" },
 ];
 const MAJOR_HOLIDAYS = ["Thanksgiving", "Christmas", "New Year's"];
-const MAJOR_HOLIDAY_DATES = {
-  Thanksgiving: "11/26/2026",
-  Christmas: "12/25/2026",
-  "New Year's": "01/01/2027",
+// The holiday-half editor starts from these defaults, but users can shift the
+// date ranges for a future academic year without changing code.
+const DEFAULT_MAJOR_HOLIDAY_BLOCKS = {
+  Thanksgiving: [
+    { label: "Thanksgiving A", start: "11/25/2026", end: "11/26/2026" },
+    { label: "Thanksgiving B", start: "11/27/2026", end: "11/29/2026" },
+  ],
+  Christmas: [
+    { label: "Christmas A", start: "12/22/2026", end: "12/24/2026" },
+    { label: "Christmas B", start: "12/25/2026", end: "12/27/2026" },
+  ],
+  "New Year's": [
+    { label: "New Year's A", start: "12/28/2026", end: "12/30/2026" },
+    { label: "New Year's B", start: "12/31/2026", end: "01/03/2027" },
+  ],
 };
 const HOLIDAY_WEEKEND_OPTIONS = HOLIDAY_WEEKENDS.map((item) => item.label);
 
@@ -83,11 +96,20 @@ function tintHex(hex, ratio = 0.8) {
   return `#${blend(1)}${blend(3)}${blend(5)}`;
 }
 
-function getCallType(dateStr, exceptionMonths) {
+function createDefaultMajorHolidayBlocks() {
+  return JSON.parse(JSON.stringify(DEFAULT_MAJOR_HOLIDAY_BLOCKS));
+}
+
+function getCallType(dateStr, exceptionMonths, majorHolidayBlocks = DEFAULT_MAJOR_HOLIDAY_BLOCKS) {
+  // Call labels drive the calendar, in-house totals, validation messaging, and
+  // workbook export, so this helper is the single source of truth.
   const date = moment(dateStr, DATE_FMT);
   const month = date.format("YYYY-MM");
 
-  if (Object.values(MAJOR_HOLIDAY_DATES).includes(dateStr)) {
+  const inMajorHoliday = Object.values(majorHolidayBlocks).some((halves) => halves.some((item) => (
+    date.isBetween(moment(item.start, DATE_FMT), moment(item.end, DATE_FMT), "day", "[]")
+  )));
+  if (inMajorHoliday) {
     return "Holiday Call";
   }
 
@@ -169,14 +191,14 @@ function buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr)
   return rows;
 }
 
-function buildMajorHolidayRows(schedule, exceptionMonths) {
-  const byDate = {};
-  schedule.forEach((item) => { byDate[item.date] = item.fellow; });
-  return Object.entries(MAJOR_HOLIDAY_DATES).map(([label, dateStr]) => [
-    label,
-    dateStr,
-    byDate[dateStr] || "-",
-    getCallType(dateStr, exceptionMonths),
+function buildMajorHolidayRows(majorHolidayAssignments) {
+  return (majorHolidayAssignments || []).map((item) => [
+    item.holiday,
+    item.label,
+    item.start,
+    item.end,
+    item.fellow || "-",
+    "Holiday Call",
   ]);
 }
 
@@ -258,10 +280,14 @@ function exportCalendarWorkbook(
   roster,
   vacations,
   holidayWeekends,
+  majorHolidayAssignments,
+  majorHolidayBlocks,
   exceptionMonths,
   options = {},
 ) {
   const { download = true } = options;
+  // This uses Excel XML rather than plain CSV so the export can include tabs,
+  // per-fellow colors, and richer calendar cell labels without a spreadsheet dependency.
   const byDate = {};
   for (const item of schedule) byDate[item.date] = item.fellow;
 
@@ -304,7 +330,7 @@ function exportCalendarWorkbook(
       let styleId = "default";
       if (byDate[dateStr]) {
         const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === byDate[dateStr]);
-        const callType = getCallType(dateStr, exceptionMonths);
+        const callType = getCallType(dateStr, exceptionMonths, majorHolidayBlocks);
         label += `\n${byDate[dateStr]}\n${callType}`;
         styleId = fellowIndex >= 0 ? `fellow_${fellowIndex}` : "default";
       }
@@ -340,7 +366,7 @@ function exportCalendarWorkbook(
   }
 
   const vacationRows = buildVacationRows(roster, vacations);
-  const majorHolidayRows = buildMajorHolidayRows(schedule, exceptionMonths);
+  const majorHolidayRows = buildMajorHolidayRows(majorHolidayAssignments);
   const weekendRows = buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr);
 
   const assignmentsRows = [];
@@ -362,7 +388,7 @@ function exportCalendarWorkbook(
   };
 
   pushSection("Vacation Assignments", ["Fellow", "Vacation Slot", "From", "To"], vacationRows);
-  pushSection("Major Holiday Assignments", ["Holiday", "Date", "Assigned Fellow", "Call Type"], majorHolidayRows);
+  pushSection("Major Holiday Assignments", ["Holiday", "Half", "Start", "End", "Assigned Fellow", "Call Type"], majorHolidayRows);
   pushSection("Three-Day And Holiday Weekend Assignments", ["Assignment", "Start", "End", "Assigned Fellow", "Call Type"], weekendRows);
 
   const workbook = `<?xml version="1.0"?>
@@ -375,7 +401,7 @@ function exportCalendarWorkbook(
 <Styles>${styles.join("")}</Styles>
 ${monthSheets.join("")}
 <Worksheet ss:Name="Assignments"><Table>
-<Column ss:Width="160"/><Column ss:Width="120"/><Column ss:Width="120"/><Column ss:Width="160"/><Column ss:Width="120"/>
+<Column ss:Width="160"/><Column ss:Width="120"/><Column ss:Width="120"/><Column ss:Width="120"/><Column ss:Width="160"/><Column ss:Width="120"/>
 ${assignmentsRows.join("")}
 </Table></Worksheet>
 </Workbook>`;
@@ -514,14 +540,8 @@ function PcicuExceptionMonthEditor({ months, selectedMonths, onToggle }) {
   );
 }
 
-function BackendStatusBadge({ status, apiUrl, onRetry }) {
+function BackendStatusBadge({ status, checking, apiUrl, onRetry }) {
   const statusStyles = {
-    checking: {
-      bg: "#e9ecef",
-      color: "#495057",
-      label: "Checking backend...",
-      detail: "Waking the backend can take a little time on Render's free tier.",
-    },
     connected: {
       bg: "#d4edda",
       color: "#155724",
@@ -541,7 +561,7 @@ function BackendStatusBadge({ status, apiUrl, onRetry }) {
       detail: "Set REACT_APP_API_URL in the Pages workflow variables.",
     },
   };
-  const current = statusStyles[status] || statusStyles.checking;
+  const current = statusStyles[status] || statusStyles.error;
 
   return (
     <div
@@ -554,13 +574,33 @@ function BackendStatusBadge({ status, apiUrl, onRetry }) {
         color: current.color,
       }}
     >
-      <strong>{current.label}</strong>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 22 }}>
+        <strong>{current.label}</strong>
+        {checking && status !== "unconfigured" && (
+          <span
+            aria-label="Checking backend connection"
+            title="Checking backend connection"
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: "50%",
+              border: `2px solid ${current.color}33`,
+              borderTopColor: current.color,
+              display: "inline-block",
+              animation: "backend-status-spin 0.9s linear infinite",
+              flex: "0 0 auto",
+            }}
+          />
+        )}
+      </div>
       {apiUrl && (
         <span style={{ marginLeft: 8, fontSize: 12 }}>
           {apiUrl}
         </span>
       )}
-      <div style={{ fontSize: 12, marginTop: 4 }}>{current.detail}</div>
+      <div style={{ fontSize: 12, marginTop: 4, minHeight: 16 }}>
+        {current.detail}
+      </div>
       {onRetry && status !== "connected" && status !== "unconfigured" && (
         <button
           onClick={onRetry}
@@ -691,6 +731,65 @@ function HolidayPreferenceEditor({ roster, preferences, onUpdate }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function MajorHolidayBlockEditor({ blocks, onChange }) {
+  // Major-holiday windows vary year to year, so the scheduler exposes these
+  // ranges directly instead of hard-coding them in the UI.
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        Major Holiday Coverage Dates
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Choose the two date ranges used for each major holiday
+        </span>
+      </label>
+      <div style={{ display: "grid", gap: 12 }}>
+        {Object.entries(blocks).map(([holiday, halves]) => (
+          <div
+            key={holiday}
+            style={{
+              background: "#fff",
+              border: "1px solid #dee2e6",
+              borderRadius: 8,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>{holiday}</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {halves.map((half, index) => (
+                <div key={half.label} style={{ display: "grid", gridTemplateColumns: "140px 1fr 1fr", gap: 10, alignItems: "center" }}>
+                  <span style={{ fontWeight: 600, color: "#555" }}>{half.label}</span>
+                  <input
+                    type="date"
+                    value={moment(half.start, DATE_FMT).format("YYYY-MM-DD")}
+                    onChange={(e) => {
+                      const next = createDefaultMajorHolidayBlocks();
+                      Object.keys(next).forEach((key) => { next[key] = blocks[key].map((item) => ({ ...item })); });
+                      next[holiday][index].start = moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT);
+                      onChange(next);
+                    }}
+                    style={inputStyle}
+                  />
+                  <input
+                    type="date"
+                    value={moment(half.end, DATE_FMT).format("YYYY-MM-DD")}
+                    onChange={(e) => {
+                      const next = createDefaultMajorHolidayBlocks();
+                      Object.keys(next).forEach((key) => { next[key] = blocks[key].map((item) => ({ ...item })); });
+                      next[holiday][index].end = moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT);
+                      onChange(next);
+                    }}
+                    style={inputStyle}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -904,6 +1003,86 @@ function HolidayWeekendTable({ holidayWeekends }) {
   );
 }
 
+function MajorHolidayTable({ majorHolidays }) {
+  if (!majorHolidays?.length) return null;
+  return (
+    <div style={{ marginBottom: 20, overflowX: "auto" }}>
+      <h2 style={{ marginBottom: 10, fontSize: 18 }}>Major Holiday Halves</h2>
+      <table style={{ borderCollapse: "collapse", width: "100%", background: "#fff" }}>
+        <thead>
+          <tr>
+            <th style={tableHeaderStyle}>Holiday</th>
+            <th style={tableHeaderStyle}>Half</th>
+            <th style={tableHeaderStyle}>Coverage Window</th>
+            <th style={tableHeaderStyle}>Assigned Fellow</th>
+          </tr>
+        </thead>
+        <tbody>
+          {majorHolidays.map((item) => (
+            <tr key={item.label}>
+              <td style={tableCellStyle}>{item.holiday}</td>
+              <td style={tableCellStyle}>{item.label}</td>
+              <td style={tableCellStyle}>{item.start} to {item.end}</td>
+              <td style={tableCellStyle}>{item.fellow || "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function InHouseCallSummary({ roster, schedule, exceptionMonths, majorHolidayBlocks }) {
+  if (!schedule?.length) return null;
+
+  const counts = Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), 0]));
+  schedule.forEach((item) => {
+    if (getCallType(item.date, exceptionMonths, majorHolidayBlocks) === "In-House Call") {
+      counts[item.fellow] = (counts[item.fellow] || 0) + 1;
+    }
+  });
+
+  return (
+    <div style={{ marginBottom: 20, overflowX: "auto" }}>
+      <h2 style={{ marginBottom: 10, fontSize: 18 }}>In-House Call Totals</h2>
+      <table style={{ borderCollapse: "collapse", width: "100%", background: "#fff" }}>
+        <thead>
+          <tr>
+            <th style={tableHeaderStyle}>Fellow</th>
+            <th style={tableHeaderStyle}>PGY</th>
+            <th style={tableHeaderStyle}>In-House Calls</th>
+            <th style={tableHeaderStyle}>Target Range</th>
+          </tr>
+        </thead>
+        <tbody>
+          {roster.map((fellow, index) => {
+            const total = counts[fellow.name.trim()] || 0;
+            const inRange = total >= 19 && total <= 22;
+            return (
+              <tr key={fellow.id}>
+                <td style={{ ...tableCellStyle, background: colorWithAlpha(fellowColor(index), 0.12) }}>
+                  {fellow.name}
+                </td>
+                <td style={tableCellStyle}>{fellow.pgy}</td>
+                <td
+                  style={{
+                    ...tableCellStyle,
+                    fontWeight: 700,
+                    color: inRange ? "#155724" : "#856404",
+                  }}
+                >
+                  {total}
+                </td>
+                <td style={tableCellStyle}>19-22</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ValidationPanel({ checks }) {
   if (!checks?.length) return null;
   const allOk = checks.every((check) => check.ok);
@@ -1027,6 +1206,7 @@ function RulesValidationTab({ checks, error }) {
         "Both PGY-1 fellows must be on imaging in July 2026.",
         "No fellow may repeat the same non-research rotation in back-to-back months.",
         "Research may repeat in consecutive months when needed, but no fellow may have more than two research months in a row.",
+        "Long runs of the harder rotations consult, cath, and PCICU are discouraged; more than two of those in a row is treated as a soft penalty.",
         "October board-exam takers are preferentially placed on imaging or research when feasible.",
       ],
     },
@@ -1050,6 +1230,12 @@ function RulesValidationTab({ checks, error }) {
       items: [
         "Standard weekends are Friday through Sunday blocks assigned to one fellow.",
         "Holiday weekends are treated as special blocks and each fellow gets exactly one per year.",
+        "Each major holiday is split into two halves, with one fellow assigned to each half.",
+        "Thanksgiving halves default to 11/25-11/26 and 11/27-11/29.",
+        "Christmas halves default to 12/22-12/24 and 12/25-12/27.",
+        "New Year's halves default to 12/28-12/30 and 12/31-01/03.",
+        "Those major holiday date ranges can be edited in the Scheduler tab.",
+        "Each fellow is assigned exactly one half of one major holiday per year.",
         "If the holiday falls on Friday, the block expands to Thursday through Sunday.",
         "If the holiday falls on Saturday, Sunday, or Monday, the block expands to Friday through Monday.",
         "The six tracked holiday weekends are July 4, Labor Day, MLK Day, Good Friday, Memorial Day, and Juneteenth.",
@@ -1073,6 +1259,7 @@ function RulesValidationTab({ checks, error }) {
         "Both PGY-1 fellows on imaging in July 2026",
         "No repeated non-research rotations in back-to-back months",
         "No fellow has more than two consecutive research months",
+        "Major holiday half-block integrity and one-half-per-fellow coverage",
         "Monday consult assignments",
         "Tuesday PCICU/consult exception-month rule using the selected 6 PICU-covered months",
         "Weekend and holiday block integrity",
@@ -1139,9 +1326,11 @@ function RulesValidationTab({ checks, error }) {
   );
 }
 
-function buildValidation(schedule, rotations, holidayWeekends, start, end, exceptionMonths, roster) {
+function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, start, end, exceptionMonths, roster) {
   if (!schedule.length) return [];
 
+  // Validation is derived from the solved output so the Final Calendar tab can
+  // explain exactly which rule was satisfied or violated by a generated schedule.
   const byDate = {};
   schedule.forEach((item) => { byDate[item.date] = item.fellow; });
   const consultByMonth = {};
@@ -1170,6 +1359,7 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
   const mondayErrors = [];
   const tuesdayErrors = [];
   const weekendErrors = [];
+  const majorHolidayErrors = [];
   const consultWeekendErrors = [];
   const pcicuWeekendErrors = [];
   const consecutiveWeekendErrors = [];
@@ -1177,10 +1367,14 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
   const thursdayWeekendErrors = [];
   const cathThursdayMatches = [];
   const holidayCounts = {};
+  const majorHolidayCounts = {};
 
   const exceptionMonthSet = new Set(exceptionMonths);
   const holidayStartMap = Object.fromEntries(HOLIDAY_WEEKENDS.map((item) => [item.start, item]));
   const holidayCoveredDates = new Set();
+  const majorHolidayStartMap = Object.fromEntries(
+    (majorHolidays || []).map((item) => [item.start, item]),
+  );
   const blockStartByDate = {};
   const weekendAssignments = [];
   HOLIDAY_WEEKENDS.forEach((item) => {
@@ -1190,6 +1384,14 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
       const dateKey = curHoliday.format(DATE_FMT);
       holidayCoveredDates.add(dateKey);
       blockStartByDate[dateKey] = item.start;
+      curHoliday.add(1, "day");
+    }
+  });
+  (majorHolidays || []).forEach((item) => {
+    const curHoliday = moment(item.start, DATE_FMT);
+    const endHoliday = moment(item.end, DATE_FMT);
+    while (curHoliday.isSameOrBefore(endHoliday)) {
+      blockStartByDate[curHoliday.format(DATE_FMT)] = item.start;
       curHoliday.add(1, "day");
     }
   });
@@ -1359,6 +1561,18 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
       if (dates[0] === pcicuByMonth[month]) {
         pcicuWeekendErrors.push(`${holiday.label}: PCICU fellow ${dates[0]} was assigned the holiday weekend`);
       }
+    } else if (majorHolidayStartMap[dateStr]) {
+      const majorHoliday = majorHolidayStartMap[dateStr];
+      const endMoment = moment(majorHoliday.end, DATE_FMT);
+      const dates = [];
+      const tmp = cur.clone();
+      while (tmp.isSameOrBefore(endMoment)) {
+        dates.push(byDate[tmp.format(DATE_FMT)]);
+        tmp.add(1, "day");
+      }
+      if (new Set(dates).size !== 1) {
+        majorHolidayErrors.push(`${majorHoliday.label}: holiday half does not stay with one fellow`);
+      }
     } else if (
       cur.day() === 5 &&
       !holidayCoveredDates.has(dateStr) &&
@@ -1401,6 +1615,15 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
 
   (holidayWeekends || []).forEach((item) => {
     holidayCounts[item.fellow] = (holidayCounts[item.fellow] || 0) + 1;
+  });
+  (majorHolidays || []).forEach((item) => {
+    majorHolidayCounts[item.fellow] = (majorHolidayCounts[item.fellow] || 0) + 1;
+  });
+  const majorHolidayCoverageCounts = Object.fromEntries(
+    Object.keys(DEFAULT_MAJOR_HOLIDAY_BLOCKS).map((holiday) => [holiday, 0]),
+  );
+  (majorHolidays || []).forEach((item) => {
+    majorHolidayCoverageCounts[item.holiday] = (majorHolidayCoverageCounts[item.holiday] || 0) + 1;
   });
 
   weekendAssignments
@@ -1457,6 +1680,11 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
       : researchRunErrors.slice(0, 3).join(" | "),
   });
   checks.push({
+    ok: majorHolidayErrors.length === 0,
+    label: "Major holiday blocks",
+    detail: majorHolidayErrors.length === 0 ? "All major holiday halves stay together." : majorHolidayErrors.slice(0, 3).join(" | "),
+  });
+  checks.push({
     ok: mondayErrors.length === 0,
     label: "Consult Mondays",
     detail: mondayErrors.length === 0 ? "All Mondays go to the consult fellow." : mondayErrors.slice(0, 3).join(" | "),
@@ -1510,6 +1738,11 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
     label: "Holiday weekends",
     detail: (holidayWeekends || []).map((item) => `${item.label}: ${item.fellow}`).join(", "),
   });
+  checks.push({
+    ok: fellows.every((fellow) => majorHolidayCounts[fellow] === 1) && Object.values(majorHolidayCoverageCounts).every((count) => count === 2),
+    label: "Major holidays",
+    detail: (majorHolidays || []).map((item) => `${item.label}: ${item.fellow}`).join(", "),
+  });
 
   return checks;
 }
@@ -1555,6 +1788,8 @@ const tableCellStyle = {
 
 export default function App() {
   const storedState = useMemo(() => readStoredState(), []);
+  // Persisting most inputs locally makes long scheduling sessions less fragile
+  // when the page refreshes or the user switches between tabs.
   const [roster, setRoster] = useState(storedState?.roster || INITIAL_ROSTER);
   const [start, setStart] = useState(storedState?.start || "07/01/2026");
   const [end, setEnd] = useState(storedState?.end || "06/30/2027");
@@ -1563,12 +1798,16 @@ export default function App() {
   const [holidayPreferences, setHolidayPreferences] = useState(
     storedState?.holidayPreferences || createDefaultPreferenceState,
   );
+  const [majorHolidayBlocks, setMajorHolidayBlocks] = useState(
+    storedState?.majorHolidayBlocks || createDefaultMajorHolidayBlocks,
+  );
   const [pcicuExceptionMonths, setPcicuExceptionMonths] = useState(
     storedState?.pcicuExceptionMonths || DEFAULT_PCICU_EXCEPTION_MONTHS,
   );
   const [schedule, setSchedule] = useState(storedState?.schedule || []);
   const [rotations, setRotations] = useState(storedState?.rotations || []);
   const [holidayWeekends, setHolidayWeekends] = useState(storedState?.holidayWeekends || []);
+  const [majorHolidays, setMajorHolidays] = useState(storedState?.majorHolidays || []);
   const [validation, setValidation] = useState(storedState?.validation || []);
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState("generate");
@@ -1576,7 +1815,8 @@ export default function App() {
   const [testResult, setTestResult] = useState(storedState?.testResult || null);
   const [calendarDate, setCalendarDate] = useState(() => moment("07/01/2026", DATE_FMT).toDate());
   const [activeTab, setActiveTab] = useState("scheduler");
-  const [backendStatus, setBackendStatus] = useState(API_URL ? "checking" : "unconfigured");
+  const [backendStatus, setBackendStatus] = useState(storedState?.backendStatus || (API_URL ? "error" : "unconfigured"));
+  const [backendChecking, setBackendChecking] = useState(Boolean(API_URL));
 
   const months = useMemo(() => listMonths(start, end), [start, end]);
   const apiConfigured = Boolean(API_URL);
@@ -1584,14 +1824,18 @@ export default function App() {
   const checkBackend = useCallback(async () => {
     if (!apiConfigured) {
       setBackendStatus("unconfigured");
+      setBackendChecking(false);
       return;
     }
-    setBackendStatus("checking");
+    setBackendChecking(true);
     try {
       const response = await fetch(`${API_URL}/`, { method: "GET" });
-      setBackendStatus(response.ok ? "connected" : "error");
+      const nextStatus = response.ok ? "connected" : "error";
+      setBackendStatus((current) => (current === nextStatus ? current : nextStatus));
     } catch {
-      setBackendStatus("error");
+      setBackendStatus((current) => (current === "error" ? current : "error"));
+    } finally {
+      setBackendChecking(false);
     }
   }, [apiConfigured]);
 
@@ -1606,10 +1850,13 @@ export default function App() {
         vacations,
         boardExamIds,
         holidayPreferences,
+        majorHolidayBlocks,
         pcicuExceptionMonths,
         schedule,
         rotations,
         holidayWeekends,
+        majorHolidays,
+        backendStatus,
         validation,
         testResult,
       }),
@@ -1618,8 +1865,11 @@ export default function App() {
     boardExamIds,
     end,
     holidayPreferences,
+    majorHolidayBlocks,
     pcicuExceptionMonths,
     holidayWeekends,
+    majorHolidays,
+    backendStatus,
     roster,
     rotations,
     schedule,
@@ -1632,6 +1882,7 @@ export default function App() {
   useEffect(() => {
     if (!apiConfigured) {
       setBackendStatus("unconfigured");
+      setBackendChecking(false);
       return;
     }
 
@@ -1641,7 +1892,10 @@ export default function App() {
       try {
         await checkBackend();
       } catch {
-        if (!cancelled) setBackendStatus("error");
+        if (!cancelled) {
+          setBackendStatus("error");
+          setBackendChecking(false);
+        }
       }
     };
 
@@ -1663,13 +1917,14 @@ export default function App() {
         schedule,
         rotations,
         holidayWeekends,
+        majorHolidays,
         start,
         end,
         pcicuExceptionMonths,
         roster,
       ),
     );
-  }, [end, holidayWeekends, pcicuExceptionMonths, roster, rotations, schedule, start]);
+  }, [end, holidayWeekends, majorHolidays, pcicuExceptionMonths, roster, rotations, schedule, start]);
 
   const generateSchedule = useCallback(async () => {
     setLoadingMode("generate");
@@ -1717,6 +1972,7 @@ export default function App() {
               holidayPreferences[fellow.id],
             ]),
           ),
+          major_holiday_blocks: majorHolidayBlocks,
           pcicu_exception_months: pcicuExceptionMonths,
         }),
       });
@@ -1730,12 +1986,14 @@ export default function App() {
       setSchedule(data.schedule || []);
       setRotations(data.rotations || []);
       setHolidayWeekends(data.holiday_weekends || []);
+      setMajorHolidays(data.major_holidays || []);
       setCalendarDate(moment(start, DATE_FMT).toDate());
       setValidation(
         buildValidation(
           data.schedule || [],
           data.rotations || [],
           data.holiday_weekends || [],
+          data.major_holidays || [],
           start,
           end,
           pcicuExceptionMonths,
@@ -1748,7 +2006,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [boardExamIds, holidayPreferences, pcicuExceptionMonths, roster, start, end, vacations]);
+  }, [boardExamIds, holidayPreferences, majorHolidayBlocks, pcicuExceptionMonths, roster, start, end, vacations]);
 
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -1794,6 +2052,7 @@ export default function App() {
           holiday_preferences: Object.fromEntries(
             roster.map((fellow) => [fellow.name.trim(), randomPreferences[fellow.id]]),
           ),
+          major_holiday_blocks: majorHolidayBlocks,
           pcicu_exception_months: randomExceptionMonths,
         }),
       });
@@ -1808,6 +2067,7 @@ export default function App() {
         data.schedule || [],
         data.rotations || [],
         data.holiday_weekends || [],
+        data.major_holidays || [],
         start,
         end,
         randomExceptionMonths,
@@ -1820,6 +2080,8 @@ export default function App() {
         roster,
         vacations,
         data.holiday_weekends || [],
+        data.major_holidays || [],
+        majorHolidayBlocks,
         randomExceptionMonths,
         { download: false },
       );
@@ -1832,6 +2094,7 @@ export default function App() {
       setSchedule(data.schedule || []);
       setRotations(data.rotations || []);
       setHolidayWeekends(data.holiday_weekends || []);
+      setMajorHolidays(data.major_holidays || []);
       setCalendarDate(moment(start, DATE_FMT).toDate());
       setValidation(nextValidation);
       setActiveTab("calendar");
@@ -1861,12 +2124,12 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [apiConfigured, months, roster, start, end, vacations]);
+  }, [apiConfigured, months, roster, start, end, vacations, majorHolidayBlocks]);
 
   const events = schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
     const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === item.fellow);
-    const callType = getCallType(item.date, pcicuExceptionMonths);
+    const callType = getCallType(item.date, pcicuExceptionMonths, majorHolidayBlocks);
     return {
       title: `${item.fellow} - ${callType}`,
       start: date.toDate(),
@@ -1886,6 +2149,10 @@ export default function App() {
         @keyframes scheduler-loading-slide {
           0% { transform: translateX(-120%); }
           100% { transform: translateX(320%); }
+        }
+        @keyframes backend-status-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
       <h1 style={{ marginBottom: 20 }}>Fellowship Scheduler</h1>
@@ -1922,7 +2189,7 @@ export default function App() {
 
       {activeTab === "scheduler" ? (
         <>
-          <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
+          <BackendStatusBadge status={backendStatus} checking={backendChecking} apiUrl={API_URL} onRetry={checkBackend} />
           <LoadingPanel loading={loading} mode={loadingMode} />
           <TestResultPanel result={testResult} />
           <div style={{ background: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -1991,6 +2258,8 @@ export default function App() {
                     roster,
                     vacations,
                     holidayWeekends,
+                    majorHolidays,
+                    majorHolidayBlocks,
                     pcicuExceptionMonths,
                   )}
                   style={{ ...btnStyle, background: "#2ca02c" }}
@@ -2018,6 +2287,11 @@ export default function App() {
                     : [...current, monthKey].sort()
                 ))
               }
+            />
+
+            <MajorHolidayBlockEditor
+              blocks={majorHolidayBlocks}
+              onChange={setMajorHolidayBlocks}
             />
 
             <HolidayPreferenceEditor
@@ -2048,15 +2322,17 @@ export default function App() {
               color: "#555",
             }}
           >
-            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
+            <BackendStatusBadge status={backendStatus} checking={backendChecking} apiUrl={API_URL} onRetry={checkBackend} />
             Generate a schedule from the Scheduler tab to view the finalized calendar, monthly rotations, holiday weekends, and validation results here.
           </div>
         ) : (
           <>
-            <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
+            <BackendStatusBadge status={backendStatus} checking={backendChecking} apiUrl={API_URL} onRetry={checkBackend} />
             <TestResultPanel result={testResult} />
             <ValidationPanel checks={validation} />
             <RotationTable roster={roster} rotations={rotations} months={months} />
+            <InHouseCallSummary roster={roster} schedule={schedule} exceptionMonths={pcicuExceptionMonths} majorHolidayBlocks={majorHolidayBlocks} />
+            <MajorHolidayTable majorHolidays={majorHolidays} />
             <HolidayWeekendTable holidayWeekends={holidayWeekends} />
 
             <Calendar
