@@ -37,6 +37,11 @@ const HOLIDAY_WEEKENDS = [
   { label: "Juneteenth", start: "06/18/2027", end: "06/21/2027" },
 ];
 const MAJOR_HOLIDAYS = ["Thanksgiving", "Christmas", "New Year's"];
+const MAJOR_HOLIDAY_DATES = {
+  Thanksgiving: "11/26/2026",
+  Christmas: "12/25/2026",
+  "New Year's": "01/01/2027",
+};
 const HOLIDAY_WEEKEND_OPTIONS = HOLIDAY_WEEKENDS.map((item) => item.label);
 
 const INITIAL_ROSTER = [
@@ -50,6 +55,129 @@ const INITIAL_ROSTER = [
 
 function fellowColor(index) {
   return PALETTE[index % PALETTE.length];
+}
+
+function colorWithAlpha(hex, alpha) {
+  if (!hex?.startsWith("#") || (hex.length !== 7 && hex.length !== 4)) return hex;
+  let normalized = hex;
+  if (hex.length === 4) {
+    normalized = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  }
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function tintHex(hex, ratio = 0.8) {
+  if (!hex?.startsWith("#") || (hex.length !== 7 && hex.length !== 4)) return hex;
+  let normalized = hex;
+  if (hex.length === 4) {
+    normalized = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  }
+  const blend = (channel) => {
+    const base = parseInt(normalized.slice(channel, channel + 2), 16);
+    const mixed = Math.round(base + (255 - base) * ratio);
+    return mixed.toString(16).padStart(2, "0");
+  };
+  return `#${blend(1)}${blend(3)}${blend(5)}`;
+}
+
+function getCallType(dateStr, exceptionMonths) {
+  const date = moment(dateStr, DATE_FMT);
+  const month = date.format("YYYY-MM");
+
+  if (Object.values(MAJOR_HOLIDAY_DATES).includes(dateStr)) {
+    return "Holiday Call";
+  }
+
+  const inHolidayWeekend = HOLIDAY_WEEKENDS.some((item) => (
+    date.isBetween(moment(item.start, DATE_FMT), moment(item.end, DATE_FMT), "day", "[]")
+  ));
+  if (inHolidayWeekend) {
+    return "Holiday Call";
+  }
+
+  const day = date.day();
+  if (day === 1) {
+    return "Home Call";
+  }
+  if (day === 2) {
+    return exceptionMonths.includes(month) ? "Home Call" : "In-House Call";
+  }
+  if (day === 3 || day === 4) {
+    return "In-House Call";
+  }
+  return "Home Call";
+}
+
+function escapeXml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function buildVacationRows(roster, vacations) {
+  const rows = [];
+  roster.forEach((fellow) => {
+    (vacations[fellow.id] || []).forEach((range, index) => {
+      if (!range.from || !range.to) return;
+      rows.push([fellow.name, `Week ${index + 1}`, range.from, range.to]);
+    });
+  });
+  return rows;
+}
+
+function buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr) {
+  const byDate = {};
+  schedule.forEach((item) => { byDate[item.date] = item.fellow; });
+
+  const rows = [];
+  const holidayCoveredDates = new Set();
+  HOLIDAY_WEEKENDS.forEach((item) => {
+    const cur = moment(item.start, DATE_FMT);
+    const end = moment(item.end, DATE_FMT);
+    while (cur.isSameOrBefore(end)) {
+      holidayCoveredDates.add(cur.format(DATE_FMT));
+      cur.add(1, "day");
+    }
+  });
+
+  holidayWeekends.forEach((item) => {
+    rows.push([item.label, item.start, item.end, item.fellow || "-", "Holiday Call"]);
+  });
+
+  const cur = moment(startStr, DATE_FMT);
+  const end = moment(endStr, DATE_FMT);
+  while (cur.isSameOrBefore(end)) {
+    const dateStr = cur.format(DATE_FMT);
+    if (cur.day() === 5 && !holidayCoveredDates.has(dateStr) && cur.clone().add(2, "days").isSameOrBefore(end)) {
+      rows.push([
+        `Weekend ${dateStr}`,
+        dateStr,
+        cur.clone().add(2, "days").format(DATE_FMT),
+        byDate[dateStr] || "-",
+        "Home Call",
+      ]);
+    }
+    cur.add(1, "day");
+  }
+
+  return rows;
+}
+
+function buildMajorHolidayRows(schedule, exceptionMonths) {
+  const byDate = {};
+  schedule.forEach((item) => { byDate[item.date] = item.fellow; });
+  return Object.entries(MAJOR_HOLIDAY_DATES).map(([label, dateStr]) => [
+    label,
+    dateStr,
+    byDate[dateStr] || "-",
+    getCallType(dateStr, exceptionMonths),
+  ]);
 }
 
 function expandWeekRanges(ranges) {
@@ -123,58 +251,145 @@ function readStoredState() {
   }
 }
 
-function exportMonthlyCSV(schedule, startStr, endStr, options = {}) {
+function exportCalendarWorkbook(
+  schedule,
+  startStr,
+  endStr,
+  roster,
+  vacations,
+  holidayWeekends,
+  exceptionMonths,
+  options = {},
+) {
   const { download = true } = options;
   const byDate = {};
   for (const item of schedule) byDate[item.date] = item.fellow;
 
-  const rows = [];
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const styles = [
+    '<Style ss:ID="default"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>',
+    '<Style ss:ID="monthHeader"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1" ss:Size="14"/><Interior ss:Color="#e9ecef" ss:Pattern="Solid"/></Style>',
+    '<Style ss:ID="dayHeader"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1"/><Interior ss:Color="#f1f3f5" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>',
+    '<Style ss:ID="sectionHeader"><Font ss:Bold="1" ss:Size="12"/><Interior ss:Color="#dbe4f0" ss:Pattern="Solid"/></Style>',
+    '<Style ss:ID="tableHeader"><Font ss:Bold="1"/><Interior ss:Color="#eef2f7" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>',
+  ];
+  roster.forEach((fellow, index) => {
+    const color = fellowColor(index);
+    styles.push(
+      `<Style ss:ID="fellow_${index}"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="${color}" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>`,
+    );
+    styles.push(
+      `<Style ss:ID="fellow_tint_${index}"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Interior ss:Color="${tintHex(color, 0.8)}" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>`,
+    );
+  });
+
+  const monthSheets = [];
   let monthCursor = moment(startStr, DATE_FMT).startOf("month");
   const windowEnd = moment(endStr, DATE_FMT);
 
   while (monthCursor.isSameOrBefore(windowEnd, "month")) {
-    rows.push([monthCursor.format("MMMM YYYY"), "", "", "", "", "", ""]);
-    rows.push(dayNames);
+    const rows = [];
+    rows.push('<Row><Cell ss:MergeAcross="6" ss:StyleID="monthHeader"><Data ss:Type="String">' + escapeXml(monthCursor.format("MMMM YYYY")) + "</Data></Cell></Row>");
+    rows.push("<Row>" + dayNames.map((dayName) => (
+      `<Cell ss:StyleID="dayHeader"><Data ss:Type="String">${escapeXml(dayName)}</Data></Cell>`
+    )).join("") + "</Row>");
 
-    let currentWeek = new Array(7).fill("");
+    let currentWeek = new Array(7).fill(null);
     let col = monthCursor.clone().startOf("month").day();
 
     for (let day = 1; day <= monthCursor.daysInMonth(); day += 1) {
       const date = monthCursor.clone().date(day);
       const dateStr = date.format(DATE_FMT);
       let label = String(day);
+      let styleId = "default";
       if (byDate[dateStr]) {
-        label += ` (${byDate[dateStr]})`;
+        const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === byDate[dateStr]);
+        const callType = getCallType(dateStr, exceptionMonths);
+        label += `\n${byDate[dateStr]}\n${callType}`;
+        styleId = fellowIndex >= 0 ? `fellow_${fellowIndex}` : "default";
       }
-      currentWeek[col] = label;
+      currentWeek[col] = { value: label, styleId };
       col += 1;
       if (col === 7) {
-        rows.push(currentWeek);
-        currentWeek = new Array(7).fill("");
+        rows.push("<Row ss:AutoFitHeight=\"0\" ss:Height=\"54\">" + currentWeek.map((cell) => {
+          if (!cell) {
+            return '<Cell ss:StyleID="default"><Data ss:Type="String"></Data></Cell>';
+          }
+          return `<Cell ss:StyleID="${cell.styleId}"><Data ss:Type="String">${escapeXml(cell.value)}</Data></Cell>`;
+        }).join("") + "</Row>");
+        currentWeek = new Array(7).fill(null);
         col = 0;
       }
     }
 
-    if (col > 0) rows.push(currentWeek);
-    rows.push([]);
+    if (col > 0) {
+      rows.push("<Row ss:AutoFitHeight=\"0\" ss:Height=\"54\">" + currentWeek.map((cell) => {
+        if (!cell) {
+          return '<Cell ss:StyleID="default"><Data ss:Type="String"></Data></Cell>';
+        }
+        return `<Cell ss:StyleID="${cell.styleId}"><Data ss:Type="String">${escapeXml(cell.value)}</Data></Cell>`;
+      }).join("") + "</Row>");
+    }
+    monthSheets.push(
+      `<Worksheet ss:Name="${escapeXml(monthCursor.format("MMM YYYY"))}"><Table>` +
+      '<Column ss:Width="115"/><Column ss:Width="140"/><Column ss:Width="140"/><Column ss:Width="140"/><Column ss:Width="140"/><Column ss:Width="140"/><Column ss:Width="140"/>' +
+      rows.join("") +
+      "</Table></Worksheet>",
+    );
     monthCursor.add(1, "month");
   }
 
-  const csv = rows
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
+  const vacationRows = buildVacationRows(roster, vacations);
+  const majorHolidayRows = buildMajorHolidayRows(schedule, exceptionMonths);
+  const weekendRows = buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr);
+
+  const assignmentsRows = [];
+  const pushSection = (title, headers, rows) => {
+    assignmentsRows.push(`<Row><Cell ss:MergeAcross="${headers.length - 1}" ss:StyleID="sectionHeader"><Data ss:Type="String">${escapeXml(title)}</Data></Cell></Row>`);
+    assignmentsRows.push("<Row>" + headers.map((header) => (
+      `<Cell ss:StyleID="tableHeader"><Data ss:Type="String">${escapeXml(header)}</Data></Cell>`
+    )).join("") + "</Row>");
+    if (rows.length === 0) {
+      assignmentsRows.push(`<Row><Cell ss:MergeAcross="${headers.length - 1}" ss:StyleID="default"><Data ss:Type="String">None</Data></Cell></Row>`);
+    } else {
+      rows.forEach((row) => {
+        assignmentsRows.push("<Row>" + row.map((cell) => (
+          `<Cell ss:StyleID="default"><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`
+        )).join("") + "</Row>");
+      });
+    }
+    assignmentsRows.push("<Row></Row>");
+  };
+
+  pushSection("Vacation Assignments", ["Fellow", "Vacation Slot", "From", "To"], vacationRows);
+  pushSection("Major Holiday Assignments", ["Holiday", "Date", "Assigned Fellow", "Call Type"], majorHolidayRows);
+  pushSection("Three-Day And Holiday Weekend Assignments", ["Assignment", "Start", "End", "Assigned Fellow", "Call Type"], weekendRows);
+
+  const workbook = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+<Styles>${styles.join("")}</Styles>
+${monthSheets.join("")}
+<Worksheet ss:Name="Assignments"><Table>
+<Column ss:Width="160"/><Column ss:Width="120"/><Column ss:Width="120"/><Column ss:Width="160"/><Column ss:Width="120"/>
+${assignmentsRows.join("")}
+</Table></Worksheet>
+</Workbook>`;
   if (!download) {
-    return csv;
+    return workbook;
   }
-  const blob = new Blob([csv], { type: "text/csv" });
+  const blob = new Blob([workbook], { type: "application/vnd.ms-excel" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "call_schedule_monthly.csv";
+  a.download = "fellowship_schedule_export.xls";
   a.click();
   URL.revokeObjectURL(url);
-  return csv;
+  return workbook;
 }
 
 function shuffle(list) {
@@ -625,8 +840,17 @@ function RotationTable({ roster, rotations, months }) {
         <thead>
           <tr>
             <th style={tableHeaderStyle}>Month</th>
-            {roster.map((fellow) => (
-              <th key={fellow.id} style={tableHeaderStyle}>{fellow.name}</th>
+            {roster.map((fellow, index) => (
+              <th
+                key={fellow.id}
+                style={{
+                  ...tableHeaderStyle,
+                  background: colorWithAlpha(fellowColor(index), 0.2),
+                  color: "#1f2933",
+                }}
+              >
+                {fellow.name}
+              </th>
             ))}
           </tr>
         </thead>
@@ -634,8 +858,14 @@ function RotationTable({ roster, rotations, months }) {
           {months.map((month) => (
             <tr key={month.key}>
               <td style={tableCellStyle}><strong>{month.label}</strong></td>
-              {roster.map((fellow) => (
-                <td key={`${month.key}-${fellow.id}`} style={tableCellStyle}>
+              {roster.map((fellow, index) => (
+                <td
+                  key={`${month.key}-${fellow.id}`}
+                  style={{
+                    ...tableCellStyle,
+                    background: colorWithAlpha(fellowColor(index), 0.12),
+                  }}
+                >
                   {ROTATION_LABELS[byMonth[month.key]?.[fellow.name]] || "-"}
                 </td>
               ))}
@@ -726,6 +956,54 @@ function TestResultPanel({ result }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function LoadingPanel({ loading, mode }) {
+  if (!loading) return null;
+
+  const label = mode === "randomTest" ? "Running random test" : "Generating schedule";
+  const detail = mode === "randomTest"
+    ? "The app is creating a randomized request, solving it, validating the result, and checking the export flow."
+    : "The solver is assigning monthly rotations and then building the call schedule. This can take a little time.";
+
+  return (
+    <div
+      style={{
+        marginBottom: 20,
+        padding: 16,
+        background: "#eef6ff",
+        border: "1px solid #b6d4fe",
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontWeight: 700, color: "#0b5ed7" }}>{label}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#0b5ed7", letterSpacing: 0.4 }}>IN PROGRESS</div>
+      </div>
+      <div
+        style={{
+          position: "relative",
+          height: 12,
+          borderRadius: 999,
+          overflow: "hidden",
+          background: "#dbeafe",
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "40%",
+            borderRadius: 999,
+            background: "linear-gradient(90deg, #1d4ed8 0%, #60a5fa 100%)",
+            animation: "scheduler-loading-slide 1.4s ease-in-out infinite",
+          }}
+        />
+      </div>
+      <div style={{ fontSize: 13, color: "#355070" }}>{detail}</div>
     </div>
   );
 }
@@ -1293,6 +1571,7 @@ export default function App() {
   const [holidayWeekends, setHolidayWeekends] = useState(storedState?.holidayWeekends || []);
   const [validation, setValidation] = useState(storedState?.validation || []);
   const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState("generate");
   const [error, setError] = useState(null);
   const [testResult, setTestResult] = useState(storedState?.testResult || null);
   const [calendarDate, setCalendarDate] = useState(() => moment("07/01/2026", DATE_FMT).toDate());
@@ -1393,6 +1672,7 @@ export default function App() {
   }, [end, holidayWeekends, pcicuExceptionMonths, roster, rotations, schedule, start]);
 
   const generateSchedule = useCallback(async () => {
+    setLoadingMode("generate");
     setLoading(true);
     setError(null);
     setValidation([]);
@@ -1473,6 +1753,7 @@ export default function App() {
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
 
+    setLoadingMode("randomTest");
     setLoading(true);
     setError(null);
     setTestResult(null);
@@ -1532,10 +1813,19 @@ export default function App() {
         randomExceptionMonths,
         roster,
       );
-      const csv = exportMonthlyCSV(data.schedule || [], start, end, { download: false });
+      const workbook = exportCalendarWorkbook(
+        data.schedule || [],
+        start,
+        end,
+        roster,
+        vacations,
+        data.holiday_weekends || [],
+        randomExceptionMonths,
+        { download: false },
+      );
       const hasValidation = nextValidation.length > 0;
       const hasEvents = (data.schedule || []).length > 0;
-      const exportWorked = typeof csv === "string" && csv.includes("July 2026");
+      const exportWorked = typeof workbook === "string" && workbook.includes('Worksheet ss:Name="Assignments"');
       const validationPassed = nextValidation.every((check) => check.ok);
 
       setBackendStatus("connected");
@@ -1571,25 +1861,33 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [apiConfigured, months, roster, start, end]);
+  }, [apiConfigured, months, roster, start, end, vacations]);
 
   const events = schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
     const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === item.fellow);
+    const callType = getCallType(item.date, pcicuExceptionMonths);
     return {
-      title: item.fellow,
+      title: `${item.fellow} - ${callType}`,
       start: date.toDate(),
       end: date.toDate(),
       allDay: true,
       resource: {
         color: fellowColor(fellowIndex),
         textColor: "#fff",
+        callType,
       },
     };
   });
 
   return (
     <div style={{ padding: 24, maxWidth: 1150, margin: "0 auto", fontFamily: "sans-serif" }}>
+      <style>{`
+        @keyframes scheduler-loading-slide {
+          0% { transform: translateX(-120%); }
+          100% { transform: translateX(320%); }
+        }
+      `}</style>
       <h1 style={{ marginBottom: 20 }}>Fellowship Scheduler</h1>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
@@ -1625,6 +1923,7 @@ export default function App() {
       {activeTab === "scheduler" ? (
         <>
           <BackendStatusBadge status={backendStatus} apiUrl={API_URL} onRetry={checkBackend} />
+          <LoadingPanel loading={loading} mode={loadingMode} />
           <TestResultPanel result={testResult} />
           <div style={{ background: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <RosterEditor
@@ -1657,6 +1956,50 @@ export default function App() {
               </div>
             )}
 
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginBottom: 18,
+                padding: 12,
+                background: "#ffffff",
+                border: "1px solid #d8dee6",
+                borderRadius: 8,
+                position: "sticky",
+                top: 12,
+                zIndex: 2,
+              }}
+            >
+              <button onClick={generateSchedule} disabled={loading || !apiConfigured} style={{ ...btnStyle, opacity: loading || !apiConfigured ? 0.6 : 1 }}>
+                {loading ? "Generating..." : "Generate schedule"}
+              </button>
+              <button
+                onClick={runRandomTest}
+                disabled={loading || !apiConfigured}
+                style={{ ...btnStyle, background: "#6f42c1", opacity: loading || !apiConfigured ? 0.6 : 1 }}
+              >
+                Run Random Test
+              </button>
+              {schedule.length > 0 && (
+                <button
+                  onClick={() => exportCalendarWorkbook(
+                    schedule,
+                    start,
+                    end,
+                    roster,
+                    vacations,
+                    holidayWeekends,
+                    pcicuExceptionMonths,
+                  )}
+                  style={{ ...btnStyle, background: "#2ca02c" }}
+                >
+                  Export calendar workbook
+                </button>
+              )}
+            </div>
+
             <BoardExamEditor
               roster={roster}
               boardExamIds={boardExamIds}
@@ -1686,24 +2029,6 @@ export default function App() {
             />
 
             <VacationEditor roster={roster} vacations={vacations} onChange={setVacations} />
-
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <button onClick={generateSchedule} disabled={loading || !apiConfigured} style={{ ...btnStyle, opacity: loading || !apiConfigured ? 0.6 : 1 }}>
-                {loading ? "Generating..." : "Generate schedule"}
-              </button>
-              <button
-                onClick={runRandomTest}
-                disabled={loading || !apiConfigured}
-                style={{ ...btnStyle, background: "#6f42c1", opacity: loading || !apiConfigured ? 0.6 : 1 }}
-              >
-                Run Random Test
-              </button>
-              {schedule.length > 0 && (
-                <button onClick={() => exportMonthlyCSV(schedule, start, end)} style={{ ...btnStyle, background: "#2ca02c" }}>
-                  Export monthly CSV
-                </button>
-              )}
-            </div>
 
             {error && (
               <div style={{ marginTop: 10, padding: "8px 12px", background: "#fde8e8", border: "1px solid #f5c2c2", borderRadius: 4, color: "#c0392b" }}>
