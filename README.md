@@ -66,7 +66,7 @@ Each monthly rotation lasts for the entire calendar month.
 - `imaging` and `research` may have multiple fellows in the same month.
 - Both first-year fellows must be on `imaging` in `July 2026`.
 - No fellow can repeat the same rotation in consecutive months.
-- `research` is the only exception and may repeat in back-to-back months.
+- `research` is the only exception and may repeat in back-to-back months, but no fellow can have more than 2 research months in a row.
 - Fellows can optionally be flagged as taking board certification exams in October.
 - For October board exam takers, the solver prefers `imaging` or `research` in `October 2026` when feasible.
 - Each fellow can rank major holidays and holiday weekends from most preferred to work to least preferred to work.

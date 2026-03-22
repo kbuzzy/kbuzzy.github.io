@@ -189,6 +189,16 @@ def generate_schedule(
                 r = rotation_index[rotation_name]
                 model.add(rotation[(f, m, r)] + rotation[(f, m + 1, r)] <= 1)
 
+    research_idx = rotation_index["research"]
+    for f in range(n):
+        for m in range(len(MONTH_KEYS) - 2):
+            model.add(
+                rotation[(f, m, research_idx)]
+                + rotation[(f, m + 1, research_idx)]
+                + rotation[(f, m + 2, research_idx)]
+                <= 2
+            )
+
     block_starts: list[int] = []
     block_days_by_start: dict[int, list[int]] = {}
     holiday_block_starts: set[int] = set()

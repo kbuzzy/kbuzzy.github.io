@@ -743,7 +743,7 @@ function RulesValidationTab({ checks, error }) {
         "Imaging and research may have multiple fellows in the same month.",
         "Both PGY-1 fellows must be on imaging in July 2026.",
         "No fellow may repeat the same non-research rotation in back-to-back months.",
-        "Research may repeat in consecutive months when needed.",
+        "Research may repeat in consecutive months when needed, but no fellow may have more than two research months in a row.",
         "October board-exam takers are preferentially placed on imaging or research when feasible.",
       ],
     },
@@ -784,6 +784,7 @@ function RulesValidationTab({ checks, error }) {
       title: "Current Validation Checks",
       items: [
         "Daily coverage across the full academic year",
+        "No fellow has more than two consecutive research months",
         "Monday consult assignments",
         "Tuesday PCICU/consult exception-month rule using the selected 6 PICU-covered months",
         "Weekend and holiday block integrity",
@@ -857,14 +858,17 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
   const consultByMonth = {};
   const pcicuByMonth = {};
   const cathByMonth = {};
+  const rotationByFellowMonth = {};
   rotations.forEach((item) => {
     if (item.rotation === "consult") consultByMonth[item.month] = item.fellow;
     if (item.rotation === "pcicu") pcicuByMonth[item.month] = item.fellow;
     if (item.rotation === "cath") cathByMonth[item.month] = item.fellow;
+    rotationByFellowMonth[`${item.fellow}::${item.month}`] = item.rotation;
   });
 
   const checks = [];
   const missing = [];
+  const researchRunErrors = [];
   const mondayErrors = [];
   const tuesdayErrors = [];
   const weekendErrors = [];
@@ -894,6 +898,30 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
 
   const cur = moment(start, DATE_FMT);
   const endDate = moment(end, DATE_FMT);
+  const monthKeys = [];
+  const monthCursor = moment(start, DATE_FMT).startOf("month");
+  while (monthCursor.isSameOrBefore(endDate, "month")) {
+    monthKeys.push(monthCursor.format("YYYY-MM"));
+    monthCursor.add(1, "month");
+  }
+
+  Object.keys(rotationByFellowMonth)
+    .map((key) => key.split("::")[0])
+    .filter((fellow, index, list) => list.indexOf(fellow) === index)
+    .forEach((fellow) => {
+      let runLength = 0;
+      monthKeys.forEach((month) => {
+        if (rotationByFellowMonth[`${fellow}::${month}`] === "research") {
+          runLength += 1;
+          if (runLength > 2) {
+            researchRunErrors.push(`${fellow} has more than two consecutive research months ending in ${month}`);
+          }
+        } else {
+          runLength = 0;
+        }
+      });
+    });
+
   while (cur.isSameOrBefore(endDate)) {
     const dateStr = cur.format(DATE_FMT);
     const month = cur.format("YYYY-MM");
@@ -1031,6 +1059,13 @@ function buildValidation(schedule, rotations, holidayWeekends, start, end, excep
     ok: missing.length === 0,
     label: "Coverage",
     detail: missing.length === 0 ? "Every day has an assignment." : `Missing dates: ${missing.slice(0, 5).join(", ")}`,
+  });
+  checks.push({
+    ok: researchRunErrors.length === 0,
+    label: "Research streaks",
+    detail: researchRunErrors.length === 0
+      ? "No fellow has more than two consecutive research months."
+      : researchRunErrors.slice(0, 3).join(" | "),
   });
   checks.push({
     ok: mondayErrors.length === 0,
