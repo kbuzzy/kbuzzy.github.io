@@ -243,3 +243,28 @@ After pushing:
 1. Create a repository variable named `REACT_APP_API_URL` in GitHub Actions settings if you have a hosted backend.
 2. In the repository's Pages settings, ensure GitHub Actions is the publishing source.
 3. The site will publish at `https://kbuzzy.github.io`.
+
+## Render Backend Setup
+
+This repo now includes Render-ready backend files:
+
+- [`backend/requirements.txt`](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/requirements.txt)
+- [`render.yaml`](/Users/kilianburke/Desktop/fellowship-scheduler-clean/render.yaml)
+
+Recommended setup on Render:
+
+1. Push this repository to GitHub.
+2. In Render, create a new Blueprint service from the repo, or create a Python Web Service manually.
+3. If you use the included `render.yaml`, Render will auto-configure:
+   - `rootDir`: `backend`
+   - build command: `pip install -r requirements.txt`
+   - start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. After the Render deploy succeeds, copy the backend URL such as `https://fellowship-scheduler-backend.onrender.com`.
+5. In the GitHub repo for the frontend, set the Actions variable `REACT_APP_API_URL` to that Render backend URL.
+
+The backend now reads `ALLOWED_ORIGINS` and defaults to:
+
+- `http://localhost:3000`
+- `https://kbuzzy.github.io`
+
+If you later use a custom frontend domain, add it to the Render `ALLOWED_ORIGINS` environment variable.

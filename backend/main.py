@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
@@ -7,14 +8,22 @@ from solver import generate_schedule
 
 DATE_FMT = "%m/%d/%Y"
 VALID_PGY = {"PGY-1", "PGY-2", "PGY-3"}
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://kbuzzy.github.io",
+]
 
 app = FastAPI(title="Fellowship Scheduler API")
 
-# Note: allow_credentials=True is incompatible with allow_origins=["*"].
-# Use a specific origin list in production, or drop allow_credentials.
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", ",".join(DEFAULT_ALLOWED_ORIGINS)).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
