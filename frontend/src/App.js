@@ -226,6 +226,23 @@ function serializeMajorHolidayBlocks(blocks) {
   );
 }
 
+function formatApiErrorDetail(detail, fallbackStatus) {
+  if (!detail) return `Server error: ${fallbackStatus}`;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => {
+      if (typeof item === "string") return item;
+      if (item?.msg) {
+        const location = Array.isArray(item.loc) ? item.loc.join(" -> ") : item.loc;
+        return location ? `${location}: ${item.msg}` : item.msg;
+      }
+      return null;
+    }).filter(Boolean);
+    return messages.length ? messages.join(" | ") : JSON.stringify(detail);
+  }
+  return JSON.stringify(detail);
+}
+
 function expandWeekRanges(ranges) {
   const dates = [];
   for (const { from, to } of ranges) {
@@ -2108,7 +2125,7 @@ export default function App() {
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || `Server error: ${response.status}`);
+      throw new Error(formatApiErrorDetail(body.detail, response.status));
     }
     return response.json();
   }, []);
