@@ -7,6 +7,7 @@ export const API_URL = process.env.REACT_APP_API_URL
 
 export const DATE_FMT = "MM/DD/YYYY";
 export const MAX_VACATION_WEEKS = 4;
+export const MAX_CALL_AVOID_REQUESTS = 8;
 export const STORAGE_KEY = "fellowship-scheduler-state";
 export const STORAGE_VERSION = 2;
 export const DEFAULT_RETRY_MAX_ATTEMPTS = 8;

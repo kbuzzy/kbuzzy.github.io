@@ -14,6 +14,7 @@ def configure_objective(
     model,
     call: dict,
     soft_terms: list,
+    call_avoid_request_count: int,
     in_house_days: set[int],
     fellow_count: int,
     days: int,
@@ -55,6 +56,7 @@ def configure_objective(
     board_exam_soft_bound = OCTOBER_BOARD_WEIGHT * 2 * fellow_count
     major_preference_soft_bound = len(major_half_info) * max_major_rank_score * max_seniority_weight
     weekend_preference_soft_bound = len(HOLIDAY_WEEKENDS) * max_weekend_rank_score * max_seniority_weight
+    call_avoid_soft_bound = call_avoid_request_count * max_seniority_weight
     thursday_soft_bound = CATH_THURSDAY_WEIGHT * sum(
         1
         for day_idx in range(days)
@@ -65,6 +67,7 @@ def configure_objective(
         board_exam_soft_bound
         + major_preference_soft_bound
         + weekend_preference_soft_bound
+        + call_avoid_soft_bound
         + thursday_soft_bound
         + difficult_streak_soft_bound
     )

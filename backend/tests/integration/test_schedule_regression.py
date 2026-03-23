@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scheduler_engine import generate_schedule
+from scheduler_engine.academic_year import build_month_keys
 from scheduler_engine.validation import build_validation
 
 
@@ -52,6 +53,7 @@ class ScheduleRegressionTests(unittest.TestCase):
             start_date=cls.start_date,
             end_date=cls.end_date,
             vacations={fellow: [] for fellow in FELLOWS},
+            call_avoid_requests={fellow: [] for fellow in FELLOWS},
             holidays={},
             pgy_years=PGY_YEARS,
             board_exam_fellows=BOARD_EXAM_FELLOWS,
@@ -94,11 +96,32 @@ class ScheduleRegressionTests(unittest.TestCase):
             exception_months=EXCEPTION_MONTHS,
             fellows=FELLOWS,
             pgy_years=PGY_YEARS,
+            month_keys=build_month_keys(2026),
+            start_year=2026,
         )
 
         monday_check = check_by_label(checks, "Consult Mondays")
         self.assertFalse(monday_check["ok"])
         self.assertIn(monday_entry["date"], monday_check["detail"])
+
+    def test_soft_call_avoid_request_is_honored_in_standard_case(self):
+        result = generate_schedule(
+            fellows=FELLOWS,
+            start_date=self.start_date,
+            end_date=self.end_date,
+            vacations={fellow: [] for fellow in FELLOWS},
+            call_avoid_requests={"Kilian": [datetime.strptime("07/03/2026", "%m/%d/%Y")]},
+            holidays={},
+            pgy_years=PGY_YEARS,
+            board_exam_fellows=BOARD_EXAM_FELLOWS,
+            holiday_preferences=HOLIDAY_PREFERENCES,
+            major_holiday_blocks=MAJOR_HOLIDAY_BLOCKS,
+            pcicu_exception_months=EXCEPTION_MONTHS,
+            solver_seed=7,
+        )
+
+        assignment = next(item for item in result["schedule"] if item["date"] == "07/03/2026")
+        self.assertNotEqual(assignment["fellow"], "Kilian")
 
 
 if __name__ == "__main__":

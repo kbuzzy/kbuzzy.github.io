@@ -218,6 +218,31 @@ export function createDefaultVacations() {
   );
 }
 
+export function createDefaultCallAvoidRequests() {
+  return Object.fromEntries(
+    INITIAL_ROSTER.map((fellow) => [
+      fellow.id,
+      [],
+    ]),
+  );
+}
+
+export function expandDateRanges(ranges) {
+  const dates = [];
+  for (const { from, to } of ranges) {
+    if (!from || !to) continue;
+    const start = moment(from, DATE_FMT);
+    const end = moment(to, DATE_FMT);
+    if (!start.isValid() || !end.isValid() || end.isBefore(start)) continue;
+    const cur = start.clone();
+    while (cur.isSameOrBefore(end)) {
+      dates.push(cur.format(DATE_FMT));
+      cur.add(1, "day");
+    }
+  }
+  return Array.from(new Set(dates));
+}
+
 export function createDefaultPreferenceState() {
   return Object.fromEntries(
     INITIAL_ROSTER.map((fellow) => [

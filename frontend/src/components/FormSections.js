@@ -1,7 +1,7 @@
 import React from "react";
 import moment from "moment";
 
-import { DATE_FMT, MAX_VACATION_WEEKS } from "../config/schedule";
+import { DATE_FMT, MAX_CALL_AVOID_REQUESTS, MAX_VACATION_WEEKS } from "../config/schedule";
 import { btnStyle, dangerButtonStyle, inputStyle, labelStyle } from "../styles/ui";
 import {
   createDefaultMajorHolidayBlocks,
@@ -513,6 +513,93 @@ export function VacationEditor({ roster, vacations, onChange }) {
           color={fellowColor(index)}
           ranges={vacations[fellow.id] || []}
           onChange={(ranges) => onChange({ ...vacations, [fellow.id]: ranges })}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FellowCallAvoidRows({ fellow, color, ranges, onChange }) {
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        padding: "10px 12px",
+        border: "1px solid #e0e0e0",
+        borderRadius: 6,
+        background: "#fff",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontWeight: 700, color }}>{fellow.name}</span>
+        <span style={{ fontSize: 12, color: "#777" }}>{fellow.pgy}</span>
+        <button
+          onClick={() => {
+            if (ranges.length >= MAX_CALL_AVOID_REQUESTS) return;
+            onChange([...ranges, { from: "", to: "" }]);
+          }}
+          disabled={ranges.length >= MAX_CALL_AVOID_REQUESTS}
+          style={{ ...btnStyle, marginLeft: "auto", opacity: ranges.length >= MAX_CALL_AVOID_REQUESTS ? 0.5 : 1 }}
+        >
+          Add request
+        </button>
+      </div>
+
+      {ranges.length === 0 && (
+        <p style={{ margin: 0, fontSize: 12, color: "#888", fontStyle: "italic" }}>
+          No call-avoid requests entered.
+        </p>
+      )}
+
+      {ranges.map((range, index) => (
+        <div key={`${fellow.id}-${index}`} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+          <input
+            type="date"
+            value={range.from ? moment(range.from, DATE_FMT).format("YYYY-MM-DD") : ""}
+            onChange={(e) => {
+              const raw = e.target.value ? moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT) : "";
+              const next = [...ranges];
+              next[index] = { from: raw, to: next[index]?.to || raw };
+              onChange(next);
+            }}
+            style={inputStyle}
+          />
+          <input
+            type="date"
+            value={range.to ? moment(range.to, DATE_FMT).format("YYYY-MM-DD") : ""}
+            onChange={(e) => {
+              const raw = e.target.value ? moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT) : "";
+              const next = [...ranges];
+              next[index] = { ...next[index], to: raw };
+              onChange(next);
+            }}
+            style={inputStyle}
+          />
+          <button onClick={() => onChange(ranges.filter((_, idx) => idx !== index))} style={dangerButtonStyle}>
+            Remove
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function CallAvoidRequestEditor({ roster, callAvoidRequests, onChange }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        Additional Call-Avoid Requests
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Optional single-day or date-range requests. These are soft preferences with lower priority than vacations and holiday coverage rules.
+        </span>
+      </label>
+      {roster.map((fellow, index) => (
+        <FellowCallAvoidRows
+          key={fellow.id}
+          fellow={fellow}
+          color={fellowColor(index)}
+          ranges={callAvoidRequests[fellow.id] || []}
+          onChange={(ranges) => onChange({ ...callAvoidRequests, [fellow.id]: ranges })}
         />
       ))}
     </div>

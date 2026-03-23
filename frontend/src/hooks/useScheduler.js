@@ -14,11 +14,13 @@ import {
 import { exportCalendarWorkbook } from "../utils/exportWorkbook";
 import {
   buildCalendarEvents,
+  createDefaultCallAvoidRequests,
   createDefaultMajorHolidayBlocks,
   createDefaultPreferenceState,
   createDefaultVacations,
   createRandomPreferenceState,
   createTypicalVacations,
+  expandDateRanges,
   expandWeekRanges,
   listMonths,
   randomVacationWeeks,
@@ -66,6 +68,7 @@ export function useScheduler() {
   const [start, setStart] = useState(storedState?.start || defaultWindow.start);
   const [end, setEnd] = useState(storedState?.end || defaultWindow.end);
   const [vacations, setVacations] = useState(storedState?.vacations || createDefaultVacations);
+  const [callAvoidRequests, setCallAvoidRequests] = useState(storedState?.callAvoidRequests || createDefaultCallAvoidRequests);
   const [boardExamIds, setBoardExamIds] = useState(storedState?.boardExamIds || []);
   const [holidayPreferences, setHolidayPreferences] = useState(
     storedState?.holidayPreferences || createDefaultPreferenceState,
@@ -127,6 +130,7 @@ export function useScheduler() {
         start,
         end,
         vacations,
+        callAvoidRequests,
         boardExamIds,
         holidayPreferences,
         majorHolidayBlocks,
@@ -145,6 +149,7 @@ export function useScheduler() {
   }, [
     backendStatus,
     boardExamIds,
+    callAvoidRequests,
     end,
     holidayPreferences,
     holidayWeekends,
@@ -199,6 +204,7 @@ export function useScheduler() {
   const buildSchedulePayload = useCallback((options) => {
     const {
       vacationsById,
+      callAvoidRequestsById,
       selectedBoardExamIds,
       selectedPreferences,
       selectedExceptionMonths,
@@ -211,6 +217,9 @@ export function useScheduler() {
       end,
       vacations: Object.fromEntries(
         roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(vacationsById[fellow.id] || [])]),
+      ),
+      call_avoid_requests: Object.fromEntries(
+        roster.map((fellow) => [fellow.name.trim(), expandDateRanges(callAvoidRequestsById[fellow.id] || [])]),
       ),
       holidays: {},
       pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
@@ -245,6 +254,7 @@ export function useScheduler() {
     const {
       kind,
       vacationsById,
+      callAvoidRequestsById,
       selectedBoardExamIds,
       selectedPreferences,
       selectedExceptionMonths,
@@ -258,6 +268,7 @@ export function useScheduler() {
       setLoadingMode({ kind, attempt, totalAttempts });
       const payload = buildSchedulePayload({
         vacationsById,
+        callAvoidRequestsById,
         selectedBoardExamIds,
         selectedPreferences,
         selectedExceptionMonths,
@@ -310,6 +321,7 @@ export function useScheduler() {
       const result = await solveWithRetries({
         kind: "generate",
         vacationsById: vacations,
+        callAvoidRequestsById: callAvoidRequests,
         selectedBoardExamIds: boardExamIds,
         selectedPreferences: holidayPreferences,
         selectedExceptionMonths: pcicuExceptionMonths,
@@ -330,6 +342,7 @@ export function useScheduler() {
   }, [
     applySolvedResult,
     boardExamIds,
+    callAvoidRequests,
     holidayPreferences,
     maxRetryAttempts,
     pcicuExceptionMonths,
@@ -389,11 +402,13 @@ export function useScheduler() {
     setTestResult(null);
 
     const randomVacations = Object.fromEntries(roster.map((fellow) => [fellow.id, randomVacationWeeks(months)]));
+    const randomCallAvoidRequests = createDefaultCallAvoidRequests();
     const randomBoardExamIds = sample(roster.map((fellow) => fellow.id), Math.floor(Math.random() * (roster.length + 1)));
     const randomExceptionMonths = sample(months.map((month) => month.key), 6).sort();
     const randomPreferences = createRandomPreferenceState(roster);
 
     setVacations(randomVacations);
+    setCallAvoidRequests(randomCallAvoidRequests);
     setBoardExamIds(randomBoardExamIds);
     setPcicuExceptionMonths(randomExceptionMonths);
     setHolidayPreferences(randomPreferences);
@@ -402,6 +417,7 @@ export function useScheduler() {
       const result = await solveWithRetries({
         kind: "randomTest",
         vacationsById: randomVacations,
+        callAvoidRequestsById: randomCallAvoidRequests,
         selectedBoardExamIds: randomBoardExamIds,
         selectedPreferences: randomPreferences,
         selectedExceptionMonths: randomExceptionMonths,
@@ -444,11 +460,13 @@ export function useScheduler() {
 
     try {
       const typicalVacations = createTypicalVacations(roster, start, end, majorHolidayBlocks);
+      const typicalCallAvoidRequests = createDefaultCallAvoidRequests();
       const typicalBoardExamIds = roster.filter((fellow) => fellow.pgy === "PGY-4").map((fellow) => fellow.id);
       const typicalExceptionMonths = [...DEFAULT_PCICU_EXCEPTION_MONTHS];
       const typicalPreferences = createRandomPreferenceState(roster);
 
       setVacations(typicalVacations);
+      setCallAvoidRequests(typicalCallAvoidRequests);
       setBoardExamIds(typicalBoardExamIds);
       setPcicuExceptionMonths(typicalExceptionMonths);
       setHolidayPreferences(typicalPreferences);
@@ -456,6 +474,7 @@ export function useScheduler() {
       const result = await solveWithRetries({
         kind: "typicalTest",
         vacationsById: typicalVacations,
+        callAvoidRequestsById: typicalCallAvoidRequests,
         selectedBoardExamIds: typicalBoardExamIds,
         selectedPreferences: typicalPreferences,
         selectedExceptionMonths: typicalExceptionMonths,
@@ -516,6 +535,7 @@ export function useScheduler() {
     setStart(defaultWindow.start);
     setEnd(defaultWindow.end);
     setVacations(createDefaultVacations());
+    setCallAvoidRequests(createDefaultCallAvoidRequests());
     setBoardExamIds([]);
     setHolidayPreferences(createDefaultPreferenceState());
     setMajorHolidayBlocks(createDefaultMajorHolidayBlocks());
@@ -542,6 +562,7 @@ export function useScheduler() {
     backendStatus,
     boardExamIds,
     calendarDate,
+    callAvoidRequests,
     checkBackend,
     end,
     error,
@@ -567,6 +588,7 @@ export function useScheduler() {
     setActiveTab,
     setBoardExamIds,
     setCalendarDate,
+    setCallAvoidRequests,
     setEnd,
     setHolidayPreferences,
     setMajorHolidayBlocks,

@@ -6,6 +6,7 @@ import { API_URL, MAX_VACATION_WEEKS } from "./config/schedule";
 import {
   BackendStatusBadge,
   BoardExamEditor,
+  CallAvoidRequestEditor,
   CollapsibleSection,
   HolidayPreferenceEditor,
   LoadingPanel,
@@ -49,6 +50,7 @@ export default function App() {
     backendStatus,
     boardExamIds,
     calendarDate,
+    callAvoidRequests,
     checkBackend,
     end,
     error,
@@ -74,6 +76,7 @@ export default function App() {
     setActiveTab,
     setBoardExamIds,
     setCalendarDate,
+    setCallAvoidRequests,
     setEnd,
     setHolidayPreferences,
     setMajorHolidayBlocks,
@@ -91,6 +94,10 @@ export default function App() {
 
   const vacationWeeksFilled = roster.reduce(
     (total, fellow) => total + (vacations[fellow.id] || []).filter((range) => range.from && range.to).length,
+    0,
+  );
+  const callAvoidRequestsFilled = roster.reduce(
+    (total, fellow) => total + (callAvoidRequests[fellow.id] || []).filter((range) => range.from && range.to).length,
     0,
   );
   const totalVacationSlots = roster.length * MAX_VACATION_WEEKS;
@@ -313,6 +320,10 @@ export default function App() {
 
             <CollapsibleSection title="Vacation Weeks" summary={`${vacationWeeksFilled}/${totalVacationSlots} weeks entered`}>
               <VacationEditor roster={roster} vacations={vacations} onChange={setVacations} />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Additional Call-Avoid Requests" summary={`${callAvoidRequestsFilled} request${callAvoidRequestsFilled === 1 ? "" : "s"}`}>
+              <CallAvoidRequestEditor roster={roster} callAvoidRequests={callAvoidRequests} onChange={setCallAvoidRequests} />
             </CollapsibleSection>
 
             <CollapsibleSection title="Holiday Preferences" summary={holidayPreferenceSummary}>

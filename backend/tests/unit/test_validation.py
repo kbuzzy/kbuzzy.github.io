@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scheduler_engine.academic_year import build_month_keys
 from scheduler_engine.validation import build_validation
 
 
@@ -91,6 +92,10 @@ class ValidationRuleTests(unittest.TestCase):
         ) = make_july_fixture()
 
     def build_checks(self, schedule=None, rotations=None, start_date=None, end_date=None):
+        active_start_date = start_date or self.start_date
+        active_end_date = end_date or self.end_date
+        del active_start_date, active_end_date
+        start_year = 2026
         return build_validation(
             schedule=schedule or self.schedule,
             rotations=rotations or self.rotations,
@@ -101,6 +106,8 @@ class ValidationRuleTests(unittest.TestCase):
             exception_months=EXCEPTION_MONTHS,
             fellows=FELLOWS,
             pgy_years=PGY_YEARS,
+            month_keys=build_month_keys(start_year),
+            start_year=start_year,
         )
 
     def test_fixture_passes_targeted_rule_checks(self):

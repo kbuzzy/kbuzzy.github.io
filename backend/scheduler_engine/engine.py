@@ -25,6 +25,7 @@ def generate_schedule(
     start_date: datetime,
     end_date: datetime,
     vacations: dict[str, list[datetime]],
+    call_avoid_requests: dict[str, list[datetime]],
     holidays: dict[str, list[datetime]],
     pgy_years: dict[str, str],
     board_exam_fellows: list[str],
@@ -217,6 +218,14 @@ def generate_schedule(
     for fellow in fellows:
         fellow_idx = fellows.index(fellow)
         seniority_weight = PGY_PREFERENCE_WEIGHTS[pgy_years[fellow]]
+        for requested_date in call_avoid_requests.get(fellow, []):
+            date_idx = idx(requested_date, start_date)
+            if 0 <= date_idx < days:
+                soft_terms.append(-seniority_weight * call[(fellow_idx, date_idx)])
+
+    for fellow in fellows:
+        fellow_idx = fellows.index(fellow)
+        seniority_weight = PGY_PREFERENCE_WEIGHTS[pgy_years[fellow]]
         prefs = holiday_preferences[fellow]
 
         major_scores = {
@@ -273,6 +282,7 @@ def generate_schedule(
         model=model,
         call=call,
         soft_terms=soft_terms,
+        call_avoid_request_count=sum(len(call_avoid_requests.get(fellow, [])) for fellow in fellows),
         in_house_days=in_house_days,
         fellow_count=fellow_count,
         days=days,

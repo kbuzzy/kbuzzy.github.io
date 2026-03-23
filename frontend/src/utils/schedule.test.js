@@ -7,6 +7,7 @@ import {
   buildCalendarEvents,
   createDefaultMajorHolidayBlocks,
   createTypicalVacations,
+  expandDateRanges,
   getCallType,
   listCandidateVacationWeeks,
 } from "./schedule";
@@ -56,5 +57,19 @@ describe("createTypicalVacations", () => {
     } finally {
       randomSpy.mockRestore();
     }
+  });
+});
+
+describe("expandDateRanges", () => {
+  test("expands inclusive single-day and multi-day call-avoid requests", () => {
+    expect(expandDateRanges([
+      { from: "07/03/2026", to: "07/03/2026" },
+      { from: "07/10/2026", to: "07/12/2026" },
+    ])).toEqual([
+      "07/03/2026",
+      "07/10/2026",
+      "07/11/2026",
+      "07/12/2026",
+    ]);
   });
 });

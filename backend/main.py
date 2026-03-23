@@ -41,6 +41,7 @@ class ScheduleRequest(BaseModel):
     start: str
     end: str
     vacations: Optional[dict[str, list[str]]] = {}
+    call_avoid_requests: Optional[dict[str, list[str]]] = {}
     holidays: Optional[dict[str, list[str]]] = {}
     pgy_years: dict[str, str]
     board_exam_fellows: Optional[list[str]] = []
@@ -116,6 +117,7 @@ def create_schedule(req: ScheduleRequest) -> dict:
         )
 
     vacations = parse_date_map(req.vacations)
+    call_avoid_requests = parse_date_map(req.call_avoid_requests)
     holidays = parse_date_map(req.holidays)
 
     missing_pgy = [name for name in req.fellows if name not in req.pgy_years]
@@ -158,6 +160,7 @@ def create_schedule(req: ScheduleRequest) -> dict:
             start,
             end,
             vacations,
+            call_avoid_requests,
             holidays,
             req.pgy_years,
             req.board_exam_fellows,
