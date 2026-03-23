@@ -8,6 +8,7 @@ import {
   DEFAULT_RETRY_MAX_ATTEMPTS,
   INITIAL_ROSTER,
   STORAGE_KEY,
+  STORAGE_VERSION,
 } from "../config/schedule";
 import { exportCalendarWorkbook } from "../utils/exportWorkbook";
 import {
@@ -119,6 +120,7 @@ export function useScheduler() {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
+        storageVersion: STORAGE_VERSION,
         roster,
         start,
         end,

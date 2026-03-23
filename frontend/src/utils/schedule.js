@@ -10,6 +10,7 @@ import {
   MAX_VACATION_WEEKS,
   PALETTE,
   STORAGE_KEY,
+  STORAGE_VERSION,
 } from "../config/schedule";
 
 export function fellowColor(index) {
@@ -233,8 +234,15 @@ export function readStoredState() {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.storageVersion !== STORAGE_VERSION) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
+    window.localStorage.removeItem(STORAGE_KEY);
     return null;
   }
 }
