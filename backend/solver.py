@@ -393,6 +393,19 @@ def generate_schedule(
             if start_idx in weekend_block_starts:
                 model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["pcicu"])] <= 1)
 
+    holiday_call_starts = holiday_block_starts.union(major_block_starts)
+    in_house_days = set()
+    for d in range(days):
+        date = start_date + timedelta(days=d)
+        month = month_dates[d]
+        dow = date.weekday()
+        if d in covered_block_days:
+            continue
+        if dow == 1 and month not in exception_tuesday_months:
+            in_house_days.add(d)
+        elif dow in (2, 3):
+            in_house_days.add(d)
+
     # This map lets the consecutive-call rule distinguish a true back-to-back
     # assignment from two dates that belong to the same protected call block.
     day_to_block_start = {}
@@ -404,20 +417,14 @@ def generate_schedule(
         next_day = d + 1
         date = start_date + timedelta(days=d)
         next_date = start_date + timedelta(days=next_day)
-        month = month_dates[d]
-
         if day_to_block_start.get(d) is not None and day_to_block_start.get(d) == day_to_block_start.get(next_day):
             continue
 
-        if (
-            date.weekday() == 0
-            and next_date.weekday() == 1
-            and month in exception_tuesday_months
-        ):
-            continue
-
         for f in range(n):
-            model.add(call[(f, d)] + call[(f, next_day)] <= 1)
+            if d in in_house_days and next_day in in_house_days:
+                model.add(call[(f, d)] + call[(f, next_day)] <= 1)
+            if next_day in holiday_call_starts:
+                model.add(call[(f, d)] + call[(f, next_day)] <= 1)
 
     for f, fellow in enumerate(fellows):
         target = PGY_WEEKEND_TARGETS[pgy_years[fellow]]
@@ -509,21 +516,10 @@ def generate_schedule(
 
     # In-house calls are the most fatigue-heavy recurring burden in the model,
     # so fairness optimization prioritizes those counts before overall totals.
-    in_house_days = []
-    for d in range(days):
-        date = start_date + timedelta(days=d)
-        month = month_dates[d]
-        dow = date.weekday()
-        if d in covered_block_days:
-            continue
-        if dow == 1 and month not in exception_tuesday_months:
-            in_house_days.append(d)
-        elif dow in (2, 3):
-            in_house_days.append(d)
-
-    in_house_counts = [sum(call[(f, d)] for d in in_house_days) for f in range(n)]
-    max_in_house = model.new_int_var(0, len(in_house_days), "max_in_house")
-    min_in_house = model.new_int_var(0, len(in_house_days), "min_in_house")
+    ordered_in_house_days = sorted(in_house_days)
+    in_house_counts = [sum(call[(f, d)] for d in ordered_in_house_days) for f in range(n)]
+    max_in_house = model.new_int_var(0, len(ordered_in_house_days), "max_in_house")
+    min_in_house = model.new_int_var(0, len(ordered_in_house_days), "min_in_house")
     for total in in_house_counts:
         model.add(total <= max_in_house)
         model.add(total >= min_in_house)
@@ -531,7 +527,7 @@ def generate_schedule(
     in_house_pairwise_spread = []
     for left in range(n):
         for right in range(left + 1, n):
-            diff = model.new_int_var(0, len(in_house_days), f"in_house_diff_{left}_{right}")
+            diff = model.new_int_var(0, len(ordered_in_house_days), f"in_house_diff_{left}_{right}")
             model.add_abs_equality(diff, in_house_counts[left] - in_house_counts[right])
             in_house_pairwise_spread.append(diff)
 
