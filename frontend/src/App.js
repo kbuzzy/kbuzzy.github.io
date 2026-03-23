@@ -1158,6 +1158,250 @@ function InHouseCallSummary({ roster, schedule, exceptionMonths, majorHolidayBlo
   );
 }
 
+function clampScore(value) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function average(values) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values) {
+  if (values.length <= 1) return 0;
+  const mean = average(values);
+  return Math.sqrt(average(values.map((value) => ((value - mean) ** 2))));
+}
+
+function buildScheduleQualityScores({
+  roster,
+  schedule,
+  rotations,
+  holidayWeekends,
+  majorHolidays,
+  exceptionMonths,
+  majorHolidayBlocks,
+  holidayPreferences,
+}) {
+  if (!schedule?.length) return null;
+
+  const byFellow = Object.fromEntries(
+    roster.map((fellow) => [
+      fellow.name.trim(),
+      {
+        inHouse: 0,
+        weekendStarts: [],
+        hardMonths: [],
+        holidayBurden: 0,
+        preferencePoints: 0,
+        preferenceMax: 0,
+      },
+    ]),
+  );
+
+  schedule.forEach((item) => {
+    const fellow = byFellow[item.fellow];
+    if (!fellow) return;
+    if (getCallType(item.date, exceptionMonths, majorHolidayBlocks) === "In-House Call") {
+      fellow.inHouse += 1;
+    }
+  });
+
+  const holidayCoveredDates = new Set();
+  HOLIDAY_WEEKENDS.forEach((item) => {
+    const cur = moment(item.start, DATE_FMT);
+    const end = moment(item.end, DATE_FMT);
+    while (cur.isSameOrBefore(end)) {
+      holidayCoveredDates.add(cur.format(DATE_FMT));
+      cur.add(1, "day");
+    }
+  });
+
+  const startDate = moment("07/01/2026", DATE_FMT);
+  const endDate = moment("06/30/2027", DATE_FMT);
+  const byDate = Object.fromEntries(schedule.map((item) => [item.date, item.fellow]));
+  const cursor = startDate.clone();
+  while (cursor.isSameOrBefore(endDate)) {
+    const dateStr = cursor.format(DATE_FMT);
+    if (
+      cursor.day() === 5
+      && !holidayCoveredDates.has(dateStr)
+      && cursor.clone().add(2, "days").isSameOrBefore(endDate)
+    ) {
+      const fellow = byDate[dateStr];
+      if (fellow && byFellow[fellow]) {
+        byFellow[fellow].weekendStarts.push(cursor.clone());
+      }
+    }
+    cursor.add(1, "day");
+  }
+
+  holidayWeekends.forEach((item) => {
+    if (item.fellow && byFellow[item.fellow]) {
+      byFellow[item.fellow].weekendStarts.push(moment(item.start, DATE_FMT));
+      byFellow[item.fellow].holidayBurden += 2;
+    }
+  });
+
+  majorHolidays.forEach((item) => {
+    if (item.fellow && byFellow[item.fellow]) {
+      byFellow[item.fellow].holidayBurden += 3;
+    }
+  });
+
+  rotations.forEach((item) => {
+    if (["consult", "cath", "pcicu"].includes(item.rotation) && byFellow[item.fellow]) {
+      byFellow[item.fellow].hardMonths.push(item.month);
+    }
+  });
+
+  roster.forEach((fellow) => {
+    const pref = holidayPreferences[fellow.id];
+    const entry = byFellow[fellow.name.trim()];
+    if (!pref || !entry) return;
+    const majorSize = pref.majorHolidays.length;
+    const weekendSize = pref.holidayWeekends.length;
+    majorHolidays
+      .filter((item) => item.fellow === fellow.name.trim())
+      .forEach((item) => {
+        const rank = pref.majorHolidays.indexOf(item.holiday);
+        if (rank >= 0) {
+          entry.preferencePoints += majorSize - rank;
+          entry.preferenceMax += majorSize;
+        }
+      });
+    holidayWeekends
+      .filter((item) => item.fellow === fellow.name.trim())
+      .forEach((item) => {
+        const rank = pref.holidayWeekends.indexOf(item.label);
+        if (rank >= 0) {
+          entry.preferencePoints += weekendSize - rank;
+          entry.preferenceMax += weekendSize;
+        }
+      });
+  });
+
+  const inHouseCounts = roster.map((fellow) => byFellow[fellow.name.trim()].inHouse);
+  const inHouseScore = clampScore(100 - ((Math.max(...inHouseCounts) - Math.min(...inHouseCounts)) * 8) - (standardDeviation(inHouseCounts) * 10));
+
+  const weekendScores = roster.map((fellow) => {
+    const dates = byFellow[fellow.name.trim()].weekendStarts
+      .sort((a, b) => a.valueOf() - b.valueOf());
+    if (dates.length <= 1) return 100;
+    const gaps = [];
+    for (let i = 1; i < dates.length; i += 1) {
+      gaps.push(dates[i].diff(dates[i - 1], "weeks", true));
+    }
+    const oneWeekGaps = gaps.filter((gap) => gap <= 1.1).length;
+    const twoWeekGaps = gaps.filter((gap) => gap > 1.1 && gap < 2.6).length;
+    const penalty = (20 * oneWeekGaps) + (8 * twoWeekGaps) + standardDeviation(gaps);
+    return clampScore(100 - penalty);
+  });
+  const weekendSpacingScore = clampScore(average(weekendScores));
+
+  const monthOrder = listMonths("07/01/2026", "06/30/2027").map((month) => month.key);
+  const hardMonthScores = roster.map((fellow) => {
+    const months = rotations
+      .filter((item) => item.fellow === fellow.name.trim() && ["consult", "cath", "pcicu"].includes(item.rotation))
+      .map((item) => item.month);
+    let penalty = 0;
+    for (let i = 0; i < monthOrder.length - 2; i += 1) {
+      const count = monthOrder.slice(i, i + 3).filter((month) => months.includes(month)).length;
+      if (count >= 2) penalty += 12;
+    }
+    for (let i = 0; i < monthOrder.length - 3; i += 1) {
+      const count = monthOrder.slice(i, i + 4).filter((month) => months.includes(month)).length;
+      if (count >= 3) penalty += 25;
+    }
+    return clampScore(100 - penalty);
+  });
+  const hardMonthScore = clampScore(average(hardMonthScores));
+
+  const holidayBurdens = roster.map((fellow) => byFellow[fellow.name.trim()].holidayBurden);
+  const holidayBurdenScore = clampScore(100 - ((Math.max(...holidayBurdens) - Math.min(...holidayBurdens)) * 15));
+
+  const preferenceRatios = roster.map((fellow) => {
+    const entry = byFellow[fellow.name.trim()];
+    if (!entry.preferenceMax) return 100;
+    return (entry.preferencePoints / entry.preferenceMax) * 100;
+  });
+  const preferenceScore = clampScore(average(preferenceRatios));
+
+  const overallScore = clampScore(
+    (0.30 * inHouseScore)
+    + (0.25 * weekendSpacingScore)
+    + (0.20 * hardMonthScore)
+    + (0.15 * holidayBurdenScore)
+    + (0.10 * preferenceScore),
+  );
+
+  return {
+    overallScore,
+    metrics: [
+      {
+        label: "In-House Burden",
+        score: inHouseScore,
+        detail: `Range ${Math.max(...inHouseCounts) - Math.min(...inHouseCounts)} call(s), SD ${standardDeviation(inHouseCounts).toFixed(1)}`,
+      },
+      {
+        label: "Weekend Spacing",
+        score: weekendSpacingScore,
+        detail: "Penalizes back-to-back or tightly clustered weekends.",
+      },
+      {
+        label: "Hard-Month Clustering",
+        score: hardMonthScore,
+        detail: "Tracks consult, cath, and PCICU concentration through the year.",
+      },
+      {
+        label: "Holiday Burden",
+        score: holidayBurdenScore,
+        detail: `Burden spread ${Math.max(...holidayBurdens) - Math.min(...holidayBurdens)} weighted point(s)`,
+      },
+      {
+        label: "Preference Satisfaction",
+        score: preferenceScore,
+        detail: "How often assigned holidays aligned with each fellow's rankings.",
+      },
+    ],
+  };
+}
+
+function ScheduleQualityPanel({ scorecard }) {
+  if (!scorecard) return null;
+  const overallColor = scorecard.overallScore >= 85 ? "#155724" : scorecard.overallScore >= 70 ? "#856404" : "#c0392b";
+  const overallBg = scorecard.overallScore >= 85 ? "#d4edda" : scorecard.overallScore >= 70 ? "#fff3cd" : "#fde8e8";
+
+  return (
+    <div style={{ marginBottom: 20, background: "#fff", border: "1px solid #dee2e6", borderRadius: 8, padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Schedule Quality</h2>
+          <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
+            Early fairness and fatigue scoring across in-house load, weekend spacing, hard rotations, holiday burden, and preference fit.
+          </div>
+        </div>
+        <div style={{ padding: "10px 14px", borderRadius: 999, background: overallBg, color: overallColor, fontWeight: 700 }}>
+          Overall Score: {scorecard.overallScore}/100
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+        {scorecard.metrics.map((metric) => (
+          <div key={metric.label} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, background: "#fafbfc" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline", marginBottom: 6 }}>
+              <div style={{ fontWeight: 700 }}>{metric.label}</div>
+              <div style={{ fontWeight: 700, color: metric.score >= 85 ? "#155724" : metric.score >= 70 ? "#856404" : "#c0392b" }}>
+                {metric.score}
+              </div>
+            </div>
+            <div style={{ fontSize: 13, color: "#555" }}>{metric.detail}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ValidationPanel({ checks }) {
   if (!checks?.length) return null;
   const allOk = checks.every((check) => check.ok);
@@ -1934,6 +2178,25 @@ export default function App() {
 
   const months = useMemo(() => listMonths(start, end), [start, end]);
   const apiConfigured = Boolean(API_URL);
+  const scheduleQuality = useMemo(() => buildScheduleQualityScores({
+    roster,
+    schedule,
+    rotations,
+    holidayWeekends,
+    majorHolidays,
+    exceptionMonths: pcicuExceptionMonths,
+    majorHolidayBlocks,
+    holidayPreferences,
+  }), [
+    holidayPreferences,
+    holidayWeekends,
+    majorHolidays,
+    majorHolidayBlocks,
+    pcicuExceptionMonths,
+    roster,
+    rotations,
+    schedule,
+  ]);
 
   const checkBackend = useCallback(async () => {
     if (!apiConfigured) {
@@ -2147,14 +2410,12 @@ export default function App() {
     setPcicuExceptionMonths(randomExceptionMonths);
     setHolidayPreferences(randomPreferences);
 
-    const names = roster.map((fellow) => fellow.name.trim());
-
     try {
       const response = await fetch(`${API_URL}/schedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fellows: names,
+          fellows: roster.map((fellow) => fellow.name.trim()),
           start,
           end,
           vacations: Object.fromEntries(
@@ -2245,7 +2506,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [apiConfigured, months, roster, start, end, majorHolidayBlocks]);
+  }, [apiConfigured, end, months, roster, start, majorHolidayBlocks]);
 
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -2265,14 +2526,12 @@ export default function App() {
     setPcicuExceptionMonths(typicalExceptionMonths);
     setHolidayPreferences(typicalPreferences);
 
-    const names = roster.map((fellow) => fellow.name.trim());
-
     try {
       const response = await fetch(`${API_URL}/schedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fellows: names,
+          fellows: roster.map((fellow) => fellow.name.trim()),
           start,
           end,
           vacations: Object.fromEntries(
@@ -2578,6 +2837,7 @@ export default function App() {
             <BackendStatusBadge status={backendStatus} checking={backendChecking} apiUrl={API_URL} onRetry={checkBackend} />
             <TestResultPanel result={testResult} />
             <ValidationPanel checks={validation} />
+            <ScheduleQualityPanel scorecard={scheduleQuality} />
             <RotationTable roster={roster} rotations={rotations} months={months} />
             <InHouseCallSummary roster={roster} schedule={schedule} exceptionMonths={pcicuExceptionMonths} majorHolidayBlocks={majorHolidayBlocks} />
             <MajorHolidayTable majorHolidays={majorHolidays} />
