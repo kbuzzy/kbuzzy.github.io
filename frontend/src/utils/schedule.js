@@ -363,7 +363,7 @@ export function buildCalendarEvents(schedule, roster, exceptionMonths, majorHoli
   return schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
     const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === item.fellow);
-    const callType = getCallType(item.date, exceptionMonths, majorHolidayBlocks);
+    const callType = item.call_type || getCallType(item.date, exceptionMonths, majorHolidayBlocks);
     return {
       title: `${item.fellow} - ${callType}`,
       start: date.toDate(),

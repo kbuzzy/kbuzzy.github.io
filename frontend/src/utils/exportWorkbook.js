@@ -25,7 +25,11 @@ export function exportCalendarWorkbook(
 ) {
   const { download = true } = options;
   const byDate = {};
-  for (const item of schedule) byDate[item.date] = item.fellow;
+  const scheduleByDate = {};
+  for (const item of schedule) {
+    byDate[item.date] = item.fellow;
+    scheduleByDate[item.date] = item;
+  }
 
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const styles = [
@@ -67,7 +71,7 @@ export function exportCalendarWorkbook(
       let styleId = "default";
       if (byDate[dateStr]) {
         const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === byDate[dateStr]);
-        const callType = getCallType(dateStr, exceptionMonths, majorHolidayBlocks);
+        const callType = scheduleByDate[dateStr]?.call_type || getCallType(dateStr, exceptionMonths, majorHolidayBlocks);
         label += `\n${byDate[dateStr]}\n${callType}`;
         styleId = fellowIndex >= 0 ? `fellow_${fellowIndex}` : "default";
       }

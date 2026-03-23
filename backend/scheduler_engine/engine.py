@@ -379,6 +379,7 @@ def generate_schedule(
         rotation,
         rotation_index,
         major_half_info,
+        exception_tuesday_months,
     )
     result["validation"] = build_validation(
         schedule=result["schedule"],

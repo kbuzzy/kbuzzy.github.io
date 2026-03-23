@@ -118,7 +118,10 @@ export function InHouseCallSummary({ roster, schedule, exceptionMonths, majorHol
 
   const counts = Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), 0]));
   schedule.forEach((item) => {
-    if (getCallType(item.date, exceptionMonths, majorHolidayBlocks) === "In-House Call") {
+    const isInHouse = typeof item.is_in_house === "boolean"
+      ? item.is_in_house
+      : getCallType(item.date, exceptionMonths, majorHolidayBlocks) === "In-House Call";
+    if (isInHouse) {
       counts[item.fellow] = (counts[item.fellow] || 0) + 1;
     }
   });
