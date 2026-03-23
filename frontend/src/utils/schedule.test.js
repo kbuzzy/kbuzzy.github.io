@@ -76,7 +76,7 @@ describe("expandDateRanges", () => {
 });
 
 describe("createTestCallAvoidRequests", () => {
-  test("creates between one and five mixed weekday and weekend requests across the year", () => {
+  test("creates between one and five requests for each fellow, with mixed weekday and weekend coverage", () => {
     const majorHolidayBlocks = createDefaultMajorHolidayBlocks();
     const randomSpy = jest.spyOn(Math, "random")
       .mockReturnValueOnce(0.6)
@@ -86,8 +86,10 @@ describe("createTestCallAvoidRequests", () => {
       const requests = createTestCallAvoidRequests(INITIAL_ROSTER, DEFAULT_WINDOW.start, DEFAULT_WINDOW.end, majorHolidayBlocks);
       const flattened = Object.values(requests).flat();
 
-      expect(flattened.length).toBeGreaterThanOrEqual(1);
-      expect(flattened.length).toBeLessThanOrEqual(5);
+      INITIAL_ROSTER.forEach((fellow) => {
+        expect(requests[fellow.id].length).toBeGreaterThanOrEqual(1);
+        expect(requests[fellow.id].length).toBeLessThanOrEqual(5);
+      });
       expect(flattened.some((range) => range.from === range.to)).toBe(true);
       expect(flattened.some((range) => range.from !== range.to)).toBe(true);
     } finally {

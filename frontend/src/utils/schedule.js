@@ -453,29 +453,34 @@ function listCandidateWeekendCallAvoidDates(start, end, majorHolidayBlocks) {
 
 export function createTestCallAvoidRequests(roster, start, end, majorHolidayBlocks) {
   const requests = createDefaultCallAvoidRequests();
-  const totalRequests = Math.floor(Math.random() * 5) + 1;
-  const weekdayCandidates = shuffle(listCandidateWeekdayCallAvoidDates(start, end, majorHolidayBlocks));
-  const weekendCandidates = shuffle(listCandidateWeekendCallAvoidDates(start, end, majorHolidayBlocks));
+  const allWeekdayCandidates = listCandidateWeekdayCallAvoidDates(start, end, majorHolidayBlocks);
+  const allWeekendCandidates = listCandidateWeekendCallAvoidDates(start, end, majorHolidayBlocks);
 
-  const selected = [];
-  if (weekendCandidates.length > 0) {
-    selected.push(weekendCandidates.shift());
-  }
-  if (selected.length < totalRequests && weekdayCandidates.length > 0) {
-    selected.push(weekdayCandidates.shift());
-  }
+  roster.forEach((fellow) => {
+    const requestCount = Math.floor(Math.random() * 5) + 1;
+    const weekdayCandidates = shuffle(allWeekdayCandidates);
+    const weekendCandidates = shuffle(allWeekendCandidates);
+    const selected = [];
 
-  const combinedCandidates = shuffle([
-    ...weekdayCandidates,
-    ...weekendCandidates,
-  ]);
-  while (selected.length < totalRequests && combinedCandidates.length > 0) {
-    selected.push(combinedCandidates.shift());
-  }
+    if (weekendCandidates.length > 0) {
+      selected.push(weekendCandidates.shift());
+    }
+    if (requestCount > 1 && weekdayCandidates.length > 0) {
+      selected.push(weekdayCandidates.shift());
+    }
 
-  selected.forEach((request) => {
-    const fellow = roster[Math.floor(Math.random() * roster.length)];
-    requests[fellow.id] = [...(requests[fellow.id] || []), { from: request.from, to: request.to }];
+    const combinedCandidates = shuffle([
+      ...weekdayCandidates,
+      ...weekendCandidates,
+    ]);
+    while (selected.length < requestCount && combinedCandidates.length > 0) {
+      const next = combinedCandidates.shift();
+      if (!selected.some((item) => item.from === next.from && item.to === next.to)) {
+        selected.push(next);
+      }
+    }
+
+    requests[fellow.id] = selected.map((request) => ({ from: request.from, to: request.to }));
   });
 
   return requests;
