@@ -1,0 +1,544 @@
+import React from "react";
+import moment from "moment";
+
+import { DATE_FMT, MAX_VACATION_WEEKS } from "../config/schedule";
+import { btnStyle, dangerButtonStyle, inputStyle, labelStyle } from "../styles/ui";
+import {
+  createDefaultMajorHolidayBlocks,
+  fellowColor,
+  moveItem,
+  snapToFriday,
+  snapToMonday,
+} from "../utils/schedule";
+
+export function BoardExamEditor({ roster, boardExamIds, onToggle }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        October Board Exams
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Soft preference: October exam takers are prioritized for imaging or research when possible
+        </span>
+      </label>
+      <div style={{ display: "grid", gap: 8 }}>
+        {roster.map((fellow) => (
+          <label
+            key={fellow.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: "#fff",
+              border: "1px solid #e0e0e0",
+              borderRadius: 6,
+              padding: "8px 10px",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={boardExamIds.includes(fellow.id)}
+              onChange={() => onToggle(fellow.id)}
+            />
+            <span>{fellow.name}</span>
+            <span style={{ color: "#777", fontSize: 12 }}>{fellow.pgy}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function PcicuExceptionMonthEditor({ months, selectedMonths, onToggle }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        PICU Tuesday Coverage Exception Months
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Select exactly 6 months when PICU covers Tuesday nights instead of the PCICU fellow
+        </span>
+      </label>
+      <div style={{ display: "grid", gap: 8 }}>
+        {months.map((month) => (
+          <label
+            key={month.key}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: "#fff",
+              border: "1px solid #e0e0e0",
+              borderRadius: 6,
+              padding: "8px 10px",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={selectedMonths.includes(month.key)}
+              onChange={() => onToggle(month.key)}
+            />
+            <span>{month.label}</span>
+          </label>
+        ))}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 12, color: selectedMonths.length === 6 ? "#155724" : "#c0392b" }}>
+        {selectedMonths.length}/6 months selected
+      </div>
+    </div>
+  );
+}
+
+export function BackendStatusBadge({ status, checking, apiUrl, onRetry }) {
+  const statusStyles = {
+    connected: {
+      bg: "#d4edda",
+      color: "#155724",
+      label: "Connected to backend",
+      detail: "The live site can reach the scheduling API.",
+    },
+    error: {
+      bg: "#fde8e8",
+      color: "#c0392b",
+      label: "Backend unavailable",
+      detail: "If Render was sleeping, this should recover automatically after a short retry window.",
+    },
+    unconfigured: {
+      bg: "#fff3cd",
+      color: "#856404",
+      label: "Backend not configured",
+      detail: "Set REACT_APP_API_URL in the Pages workflow variables.",
+    },
+  };
+  const current = statusStyles[status] || statusStyles.error;
+
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "10px 12px",
+        background: current.bg,
+        border: "1px solid rgba(0,0,0,0.08)",
+        borderRadius: 6,
+        color: current.color,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 22 }}>
+        <strong>{current.label}</strong>
+        {checking && status !== "unconfigured" && (
+          <span
+            aria-label="Checking backend connection"
+            title="Checking backend connection"
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: "50%",
+              border: `2px solid ${current.color}33`,
+              borderTopColor: current.color,
+              display: "inline-block",
+              animation: "backend-status-spin 0.9s linear infinite",
+              flex: "0 0 auto",
+            }}
+          />
+        )}
+      </div>
+      {apiUrl && <span style={{ marginLeft: 8, fontSize: 12 }}>{apiUrl}</span>}
+      <div style={{ fontSize: 12, marginTop: 4, minHeight: 16 }}>{current.detail}</div>
+      {onRetry && status !== "connected" && status !== "unconfigured" && (
+        <button
+          onClick={onRetry}
+          style={{ ...btnStyle, marginTop: 8, padding: "4px 10px" }}
+        >
+          Retry connection
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PreferenceRankingCard({ title, items, onMove }) {
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #e0e0e0",
+        borderRadius: 6,
+        padding: 12,
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 12, color: "#777", marginBottom: 10 }}>
+        Top = most preferred to work, bottom = least preferred to work
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {items.map((item, index) => (
+          <div
+            key={item}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "28px 1fr auto",
+              gap: 10,
+              alignItems: "center",
+              border: "1px solid #ececec",
+              borderRadius: 6,
+              padding: "8px 10px",
+            }}
+          >
+            <span style={{ fontWeight: 700, color: "#666" }}>{index + 1}</span>
+            <span>{item}</span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => onMove(index, -1)}
+                disabled={index === 0}
+                style={{ ...btnStyle, padding: "4px 8px", opacity: index === 0 ? 0.45 : 1 }}
+              >
+                Up
+              </button>
+              <button
+                onClick={() => onMove(index, 1)}
+                disabled={index === items.length - 1}
+                style={{ ...btnStyle, padding: "4px 8px", opacity: index === items.length - 1 ? 0.45 : 1 }}
+              >
+                Down
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function HolidayPreferenceEditor({ roster, preferences, onUpdate }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        Holiday Work Preferences
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Rank from most preferred to work to least preferred to work
+        </span>
+      </label>
+      <div style={{ display: "grid", gap: 12 }}>
+        {roster.map((fellow) => {
+          const preferenceSet = preferences[fellow.id];
+          return (
+            <div
+              key={fellow.id}
+              style={{
+                background: "#fdfdfd",
+                border: "1px solid #dee2e6",
+                borderRadius: 8,
+                padding: 14,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ fontWeight: 700 }}>{fellow.name}</span>
+                <span style={{ fontSize: 12, color: "#777" }}>{fellow.pgy}</span>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: 12,
+                }}
+              >
+                <PreferenceRankingCard
+                  title="Major Holidays"
+                  items={preferenceSet.majorHolidays}
+                  onMove={(index, direction) =>
+                    onUpdate(fellow.id, {
+                      ...preferenceSet,
+                      majorHolidays: moveItem(preferenceSet.majorHolidays, index, direction),
+                    })
+                  }
+                />
+                <PreferenceRankingCard
+                  title="Holiday Weekends"
+                  items={preferenceSet.holidayWeekends}
+                  onMove={(index, direction) =>
+                    onUpdate(fellow.id, {
+                      ...preferenceSet,
+                      holidayWeekends: moveItem(preferenceSet.holidayWeekends, index, direction),
+                    })
+                  }
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function MajorHolidayBlockEditor({ blocks, onChange }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        Major Holiday Coverage Dates
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Choose the two date ranges used for each major holiday
+        </span>
+      </label>
+      <div style={{ display: "grid", gap: 12 }}>
+        {Object.entries(blocks).map(([holiday, halves]) => (
+          <div
+            key={holiday}
+            style={{
+              background: "#fff",
+              border: "1px solid #dee2e6",
+              borderRadius: 8,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>{holiday}</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {halves.map((half, index) => (
+                <div key={half.label} style={{ display: "grid", gridTemplateColumns: "140px 1fr 1fr", gap: 10, alignItems: "center" }}>
+                  <span style={{ fontWeight: 600, color: "#555" }}>{half.label}</span>
+                  <input
+                    type="date"
+                    value={moment(half.start, DATE_FMT).format("YYYY-MM-DD")}
+                    onChange={(e) => {
+                      const next = createDefaultMajorHolidayBlocks();
+                      Object.keys(next).forEach((key) => {
+                        next[key] = blocks[key].map((item) => ({ ...item }));
+                      });
+                      next[holiday][index].start = moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT);
+                      onChange(next);
+                    }}
+                    style={inputStyle}
+                  />
+                  <input
+                    type="date"
+                    value={moment(half.end, DATE_FMT).format("YYYY-MM-DD")}
+                    onChange={(e) => {
+                      const next = createDefaultMajorHolidayBlocks();
+                      Object.keys(next).forEach((key) => {
+                        next[key] = blocks[key].map((item) => ({ ...item }));
+                      });
+                      next[holiday][index].end = moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT);
+                      onChange(next);
+                    }}
+                    style={inputStyle}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function RosterEditor({ roster, onRename }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>Fellow Roster</label>
+      <div style={{ display: "grid", gap: 8 }}>
+        {roster.map((fellow, index) => (
+          <div
+            key={fellow.id}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "16px 1fr 90px",
+              gap: 10,
+              alignItems: "center",
+              background: "#fff",
+              border: "1px solid #e0e0e0",
+              borderRadius: 6,
+              padding: "8px 10px",
+            }}
+          >
+            <span
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 2,
+                background: fellowColor(index),
+                display: "inline-block",
+              }}
+            />
+            <input
+              value={fellow.name}
+              onChange={(e) => onRename(fellow.id, e.target.value)}
+              style={inputStyle}
+            />
+            <span style={{ fontWeight: 600, color: "#666" }}>{fellow.pgy}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FellowVacationRows({ fellow, color, ranges, onChange }) {
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        padding: "10px 12px",
+        border: "1px solid #e0e0e0",
+        borderRadius: 6,
+        background: "#fff",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontWeight: 700, color }}>{fellow.name}</span>
+        <span style={{ fontSize: 12, color: "#777" }}>{fellow.pgy}</span>
+        <button
+          onClick={() => {
+            if (ranges.length >= MAX_VACATION_WEEKS) return;
+            onChange([...ranges, { from: "", to: "" }]);
+          }}
+          disabled={ranges.length >= MAX_VACATION_WEEKS}
+          style={{ ...btnStyle, marginLeft: "auto", opacity: ranges.length >= MAX_VACATION_WEEKS ? 0.5 : 1 }}
+        >
+          Add week
+        </button>
+      </div>
+
+      {ranges.length === 0 && (
+        <p style={{ margin: 0, fontSize: 12, color: "#888", fontStyle: "italic" }}>
+          No vacations entered.
+        </p>
+      )}
+
+      {ranges.map((range, index) => (
+        <div key={`${fellow.id}-${index}`} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+          <input
+            type="date"
+            value={range.from ? moment(range.from, DATE_FMT).format("YYYY-MM-DD") : ""}
+            onChange={(e) => {
+              const raw = e.target.value ? moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT) : "";
+              const next = [...ranges];
+              next[index] = { from: snapToMonday(raw), to: raw ? snapToFriday(raw) : "" };
+              onChange(next);
+            }}
+            style={inputStyle}
+          />
+          <input
+            type="date"
+            value={range.to ? moment(range.to, DATE_FMT).format("YYYY-MM-DD") : ""}
+            onChange={(e) => {
+              const raw = e.target.value ? moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT) : "";
+              const next = [...ranges];
+              next[index] = { ...next[index], to: snapToFriday(raw) };
+              onChange(next);
+            }}
+            style={inputStyle}
+          />
+          <button onClick={() => onChange(ranges.filter((_, idx) => idx !== index))} style={dangerButtonStyle}>
+            Remove
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function VacationEditor({ roster, vacations, onChange }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        Vacation Weeks
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          Monday-Friday only, up to {MAX_VACATION_WEEKS} weeks per fellow
+        </span>
+      </label>
+      {roster.map((fellow, index) => (
+        <FellowVacationRows
+          key={fellow.id}
+          fellow={fellow}
+          color={fellowColor(index)}
+          ranges={vacations[fellow.id] || []}
+          onChange={(ranges) => onChange({ ...vacations, [fellow.id]: ranges })}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function TestResultPanel({ result }) {
+  if (!result) return null;
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "12px 14px",
+        borderRadius: 8,
+        border: "1px solid #dee2e6",
+        background: result.ok ? "#d4edda" : "#fde8e8",
+        color: result.ok ? "#155724" : "#c0392b",
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>
+        {result.title || "Test Result"}: {result.ok ? "Passed" : "Failed"}
+      </div>
+      <div style={{ fontSize: 14 }}>{result.message}</div>
+      {result.details?.length > 0 && (
+        <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 18 }}>
+          {result.details.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function LoadingPanel({ loading, mode }) {
+  if (!loading) return null;
+
+  const attemptSuffix = mode.attempt && mode.totalAttempts > 1
+    ? ` (attempt ${mode.attempt} of ${mode.totalAttempts})`
+    : "";
+  const label = mode.kind === "randomTest"
+    ? "Running random test"
+    : mode.kind === "typicalTest"
+      ? "Running typical schedule test"
+      : "Generating schedule";
+  const detail = mode.kind === "randomTest"
+    ? "The app is creating a randomized request, solving it, validating the result, and checking the export flow."
+    : mode.kind === "typicalTest"
+      ? "The app is building a realistic schedule request with October first-year fellow board exams, distinct vacations, and the default PICU exception months."
+      : "The solver is assigning monthly rotations and then building the call schedule. This can take a little time.";
+
+  return (
+    <div
+      style={{
+        marginBottom: 20,
+        padding: 16,
+        background: "#eef6ff",
+        border: "1px solid #b6d4fe",
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontWeight: 700, color: "#0b5ed7" }}>{label}{attemptSuffix}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#0b5ed7", letterSpacing: 0.4 }}>IN PROGRESS</div>
+      </div>
+      <div
+        style={{
+          position: "relative",
+          height: 12,
+          borderRadius: 999,
+          overflow: "hidden",
+          background: "#dbeafe",
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "40%",
+            borderRadius: 999,
+            background: "linear-gradient(90deg, #1d4ed8 0%, #60a5fa 100%)",
+            animation: "scheduler-loading-slide 1.4s ease-in-out infinite",
+          }}
+        />
+      </div>
+      <div style={{ fontSize: 13, color: "#355070" }}>{detail}</div>
+    </div>
+  );
+}
