@@ -337,8 +337,8 @@ export function useScheduler() {
     solveWithRetries,
   ]);
 
-  const finalizeTestResult = useCallback((title, data, nextValidation, result, exceptionMonthsForRun, vacationsForRun, successMessage, failureMessage) => {
-    const workbook = exportCalendarWorkbook(
+  const finalizeTestResult = useCallback(async (title, data, nextValidation, result, exceptionMonthsForRun, vacationsForRun, successMessage, failureMessage) => {
+    const workbook = await exportCalendarWorkbook(
       data.schedule || [],
       start,
       end,
@@ -352,7 +352,7 @@ export function useScheduler() {
     );
     const hasValidation = nextValidation.length > 0;
     const hasEvents = (data.schedule || []).length > 0;
-    const exportWorked = Array.isArray(workbook?.SheetNames) && workbook.SheetNames.includes("Assignments");
+    const exportWorked = Array.isArray(workbook?.worksheets) && workbook.worksheets.some((sheet) => sheet.name === "Assignments");
     const validationPassed = result.validationPassed;
 
     applySolvedResult(data, nextValidation);
@@ -406,7 +406,7 @@ export function useScheduler() {
         allowRetryUntilValid: retryUntilValid,
       });
       setBackendStatus("connected");
-      setTestResult(finalizeTestResult(
+      setTestResult(await finalizeTestResult(
         "Run Random Test",
         result.data,
         result.nextValidation,
@@ -459,7 +459,7 @@ export function useScheduler() {
         selectedExceptionMonths: typicalExceptionMonths,
         allowRetryUntilValid: retryUntilValid,
       });
-      const nextResult = finalizeTestResult(
+      const nextResult = await finalizeTestResult(
         "Run Typical Schedule Test",
         result.data,
         result.nextValidation,

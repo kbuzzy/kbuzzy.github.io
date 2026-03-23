@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import moment from "moment";
 
 import { DATE_FMT } from "../config/schedule";
@@ -6,68 +6,163 @@ import {
   buildMajorHolidayRows,
   buildVacationRows,
   buildWeekendAssignmentRows,
+  fellowColor,
   getCallType,
 } from "./schedule";
 
-function buildMonthSheetData(schedule, startStr, endStr, roster, majorHolidayBlocks, exceptionMonths) {
-  const byDate = {};
-  const scheduleByDate = {};
-  for (const item of schedule) {
-    byDate[item.date] = item.fellow;
-    scheduleByDate[item.date] = item;
-  }
+function toArgb(hex) {
+  const normalized = hex?.startsWith("#") ? hex.slice(1) : hex;
+  return normalized?.length === 6 ? `FF${normalized.toUpperCase()}` : "FF1F77B4";
+}
 
-  const monthSheets = [];
+function styleCalendarCell(cell) {
+  cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+  cell.border = {
+    top: { style: "thin", color: { argb: "FFD0D7DE" } },
+    left: { style: "thin", color: { argb: "FFD0D7DE" } },
+    bottom: { style: "thin", color: { argb: "FFD0D7DE" } },
+    right: { style: "thin", color: { argb: "FFD0D7DE" } },
+  };
+}
+
+function buildMonthSheet(workbook, monthDate, scheduleMap, roster, majorHolidayBlocks, exceptionMonths) {
+  const sheet = workbook.addWorksheet(monthDate.format("MMM YYYY"));
+  sheet.columns = Array.from({ length: 7 }, () => ({ width: 18 }));
+
+  sheet.mergeCells("A1:G1");
+  const titleCell = sheet.getCell("A1");
+  titleCell.value = monthDate.format("MMMM YYYY");
+  titleCell.font = { bold: true, size: 16 };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE9EEF5" } };
+  sheet.getRow(1).height = 24;
+
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  let monthCursor = moment(startStr, DATE_FMT).startOf("month");
-  const windowEnd = moment(endStr, DATE_FMT);
+  const headerRow = sheet.getRow(2);
+  dayNames.forEach((name, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = name;
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center" };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFD0D7DE" } },
+      left: { style: "thin", color: { argb: "FFD0D7DE" } },
+      bottom: { style: "thin", color: { argb: "FFD0D7DE" } },
+      right: { style: "thin", color: { argb: "FFD0D7DE" } },
+    };
+  });
 
-  while (monthCursor.isSameOrBefore(windowEnd, "month")) {
-    const rows = [
-      [monthCursor.format("MMMM YYYY")],
-      dayNames,
-    ];
+  let current = monthDate.clone().startOf("month").startOf("week");
+  const monthEnd = monthDate.clone().endOf("month");
+  let rowIndex = 3;
 
-    let currentWeek = new Array(7).fill("");
-    let col = monthCursor.clone().startOf("month").day();
+  while (current.isSameOrBefore(monthEnd, "day") || current.weekday() !== 0) {
+    const row = sheet.getRow(rowIndex);
+    row.height = 58;
 
-    for (let day = 1; day <= monthCursor.daysInMonth(); day += 1) {
-      const date = monthCursor.clone().date(day);
-      const dateStr = date.format(DATE_FMT);
-      let label = String(day);
-      if (byDate[dateStr]) {
-        const callType = scheduleByDate[dateStr]?.call_type || getCallType(dateStr, exceptionMonths, majorHolidayBlocks);
-        label += `\n${byDate[dateStr]}\n${callType}`;
+    for (let col = 1; col <= 7; col += 1) {
+      const cell = row.getCell(col);
+      styleCalendarCell(cell);
+      const dateStr = current.format(DATE_FMT);
+      const scheduleItem = scheduleMap.get(dateStr);
+      const inMonth = current.month() === monthDate.month();
+
+      if (!inMonth) {
+        cell.value = "";
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+      } else if (scheduleItem) {
+        const fellowIndex = roster.findIndex((fellow) => fellow.name.trim() === scheduleItem.fellow);
+        const callType = scheduleItem.call_type || getCallType(dateStr, exceptionMonths, majorHolidayBlocks);
+        cell.value = `${current.date()}\n${scheduleItem.fellow}\n${callType}`;
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: toArgb(fellowColor(Math.max(fellowIndex, 0))) },
+        };
+        cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+      } else {
+        cell.value = `${current.date()}`;
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
       }
-      currentWeek[col] = label;
-      col += 1;
 
-      if (col === 7) {
-        rows.push(currentWeek);
-        currentWeek = new Array(7).fill("");
-        col = 0;
-      }
+      current.add(1, "day");
     }
 
-    if (col > 0) {
-      rows.push(currentWeek);
+    rowIndex += 1;
+    if (current.isAfter(monthEnd, "day") && current.weekday() === 0) {
+      break;
     }
-
-    monthSheets.push({
-      name: monthCursor.format("MMM YYYY"),
-      rows,
-    });
-    monthCursor.add(1, "month");
   }
-
-  return monthSheets;
 }
 
-function applyWorksheetLayout(worksheet, columnCount) {
-  worksheet["!cols"] = Array.from({ length: columnCount }, () => ({ wch: 18 }));
+function buildAssignmentsSheet(workbook, roster, vacations, schedule, holidayWeekends, startStr, endStr, majorHolidayAssignments, majorHolidayBlocks) {
+  const sheet = workbook.addWorksheet("Assignments");
+  sheet.columns = [
+    { width: 24 },
+    { width: 18 },
+    { width: 16 },
+    { width: 16 },
+    { width: 22 },
+    { width: 18 },
+  ];
+
+  const vacationRows = buildVacationRows(roster, vacations);
+  const majorHolidayRows = buildMajorHolidayRows(majorHolidayAssignments);
+  const weekendRows = buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr, majorHolidayBlocks);
+
+  const sections = [
+    {
+      title: "Vacation Assignments",
+      headers: ["Fellow", "Vacation Slot", "From", "To"],
+      rows: vacationRows,
+    },
+    {
+      title: "Major Holiday Assignments",
+      headers: ["Holiday", "Half", "Start", "End", "Assigned Fellow", "Call Type"],
+      rows: majorHolidayRows,
+    },
+    {
+      title: "Three-Day And Holiday Weekend Assignments",
+      headers: ["Assignment", "Start", "End", "Assigned Fellow", "Call Type"],
+      rows: weekendRows,
+    },
+  ];
+
+  let rowIndex = 1;
+  sections.forEach((section) => {
+    const titleRow = sheet.getRow(rowIndex);
+    titleRow.getCell(1).value = section.title;
+    titleRow.getCell(1).font = { bold: true, size: 12 };
+    titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCE7F3" } };
+    rowIndex += 1;
+
+    const headerRow = sheet.getRow(rowIndex);
+    section.headers.forEach((header, index) => {
+      const cell = headerRow.getCell(index + 1);
+      cell.value = header;
+      cell.font = { bold: true };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+      styleCalendarCell(cell);
+    });
+    rowIndex += 1;
+
+    const rows = section.rows.length ? section.rows : [["None"]];
+    rows.forEach((rowValues) => {
+      const row = sheet.getRow(rowIndex);
+      rowValues.forEach((value, index) => {
+        const cell = row.getCell(index + 1);
+        cell.value = value;
+        styleCalendarCell(cell);
+      });
+      rowIndex += 1;
+    });
+
+    rowIndex += 1;
+  });
 }
 
-export function exportCalendarWorkbook(
+export async function exportCalendarWorkbook(
   schedule,
   startStr,
   endStr,
@@ -80,47 +175,43 @@ export function exportCalendarWorkbook(
   options = {},
 ) {
   const { download = true } = options;
-  const workbook = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Kilian Burke";
+  workbook.created = new Date();
 
-  const monthSheets = buildMonthSheetData(
+  const scheduleMap = new Map(schedule.map((item) => [item.date, item]));
+  let monthCursor = moment(startStr, DATE_FMT).startOf("month");
+  const windowEnd = moment(endStr, DATE_FMT);
+
+  while (monthCursor.isSameOrBefore(windowEnd, "month")) {
+    buildMonthSheet(workbook, monthCursor, scheduleMap, roster, majorHolidayBlocks, exceptionMonths);
+    monthCursor = monthCursor.clone().add(1, "month");
+  }
+
+  buildAssignmentsSheet(
+    workbook,
+    roster,
+    vacations,
     schedule,
+    holidayWeekends,
     startStr,
     endStr,
-    roster,
+    majorHolidayAssignments,
     majorHolidayBlocks,
-    exceptionMonths,
   );
 
-  monthSheets.forEach(({ name, rows }) => {
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    applyWorksheetLayout(worksheet, 7);
-    XLSX.utils.book_append_sheet(workbook, worksheet, name);
-  });
-
-  const vacationRows = buildVacationRows(roster, vacations);
-  const majorHolidayRows = buildMajorHolidayRows(majorHolidayAssignments);
-  const weekendRows = buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr, majorHolidayBlocks);
-
-  const assignmentRows = [
-    ["Vacation Assignments"],
-    ["Fellow", "Vacation Slot", "From", "To"],
-    ...(vacationRows.length ? vacationRows : [["None"]]),
-    [],
-    ["Major Holiday Assignments"],
-    ["Holiday", "Half", "Start", "End", "Assigned Fellow", "Call Type"],
-    ...(majorHolidayRows.length ? majorHolidayRows : [["None"]]),
-    [],
-    ["Three-Day And Holiday Weekend Assignments"],
-    ["Assignment", "Start", "End", "Assigned Fellow", "Call Type"],
-    ...(weekendRows.length ? weekendRows : [["None"]]),
-  ];
-
-  const assignmentsSheet = XLSX.utils.aoa_to_sheet(assignmentRows);
-  applyWorksheetLayout(assignmentsSheet, 6);
-  XLSX.utils.book_append_sheet(workbook, assignmentsSheet, "Assignments");
-
   if (download) {
-    XLSX.writeFile(workbook, "fellowship_schedule_export.xlsx");
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob(
+      [buffer],
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "fellowship_schedule_export.xlsx";
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   return workbook;
