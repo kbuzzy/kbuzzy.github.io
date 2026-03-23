@@ -249,48 +249,9 @@ export default function App() {
               <button onClick={generateSchedule} disabled={loading || !apiConfigured} style={{ ...btnStyle, opacity: loading || !apiConfigured ? 0.6 : 1 }}>
                 {loading ? "Generating..." : "Generate schedule"}
               </button>
-              <button
-                onClick={runRandomTest}
-                disabled={loading || !apiConfigured}
-                style={{ ...btnStyle, background: "#6f42c1", opacity: loading || !apiConfigured ? 0.6 : 1 }}
-              >
-                Run Random Test
-              </button>
-              <button
-                onClick={runTypicalTest}
-                disabled={loading || !apiConfigured}
-                style={{ ...btnStyle, background: "#1d6f42", opacity: loading || !apiConfigured ? 0.6 : 1 }}
-              >
-                Run Typical Schedule Test
-              </button>
-              <button
-                onClick={resetSavedState}
-                disabled={loading}
-                style={{ ...btnStyle, background: "#c0392b", opacity: loading ? 0.6 : 1 }}
-              >
-                Reset saved state
-              </button>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", fontSize: 13, color: "#445" }}>
-                <input
-                  type="checkbox"
-                  checked={retryUntilValid}
-                  onChange={(e) => setRetryUntilValid(e.target.checked)}
-                />
-                <span>Retry until valid</span>
-              </label>
-              {retryUntilValid && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13, color: "#445" }}>Attempts</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="25"
-                    value={maxRetryAttempts}
-                    onChange={(e) => setMaxRetryAttempts(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
-                    style={{ ...inputStyle, width: 80 }}
-                  />
-                </div>
-              )}
+              <div style={{ marginLeft: "auto", fontSize: 13, color: "#5b6470" }}>
+                Review details below, then generate the schedule.
+              </div>
             </div>
 
             <div
@@ -365,6 +326,91 @@ export default function App() {
             <CollapsibleSection title="Major Holiday Coverage Dates" summary={holidayBlockSummary}>
               <MajorHolidayBlockEditor blocks={majorHolidayBlocks} onChange={setMajorHolidayBlocks} />
             </CollapsibleSection>
+
+            <details
+              style={{
+                marginBottom: 16,
+                background: "#fbfcfd",
+                border: "1px solid #d8dee6",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <summary
+                style={{
+                  cursor: "pointer",
+                  padding: "10px 12px",
+                  fontWeight: 600,
+                  color: "#51606f",
+                  fontSize: 14,
+                  background: "#f4f7fa",
+                }}
+              >
+                Developer tools
+              </summary>
+              <div style={{ padding: 12 }}>
+                <div style={{ fontSize: 12, color: "#667085", marginBottom: 12 }}>
+                  Test runs, retry behavior, and local-state reset live here so the main scheduler flow stays simpler for general users.
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                  <button
+                    onClick={runRandomTest}
+                    disabled={loading || !apiConfigured}
+                    style={{ ...btnStyle, background: "#6f42c1", opacity: loading || !apiConfigured ? 0.6 : 1 }}
+                  >
+                    Run Random Test
+                  </button>
+                  <button
+                    onClick={runTypicalTest}
+                    disabled={loading || !apiConfigured}
+                    style={{ ...btnStyle, background: "#1d6f42", opacity: loading || !apiConfigured ? 0.6 : 1 }}
+                  >
+                    Run Typical Schedule Test
+                  </button>
+                  <button
+                    onClick={resetSavedState}
+                    disabled={loading}
+                    style={{ ...btnStyle, background: "#c0392b", opacity: loading ? 0.6 : 1 }}
+                  >
+                    Reset saved state
+                  </button>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    padding: 10,
+                    background: "#fff",
+                    border: "1px solid #e3e8ee",
+                    borderRadius: 6,
+                  }}
+                >
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#445" }}>
+                    <input
+                      type="checkbox"
+                      checked={retryUntilValid}
+                      onChange={(e) => setRetryUntilValid(e.target.checked)}
+                    />
+                    <span>Retry until valid</span>
+                  </label>
+                  {retryUntilValid && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 13, color: "#445" }}>Attempts</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="25"
+                        value={maxRetryAttempts}
+                        onChange={(e) => setMaxRetryAttempts(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
+                        style={{ ...inputStyle, width: 80 }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </details>
 
             {error && (
               <div style={{ marginTop: 10, padding: "8px 12px", background: "#fde8e8", border: "1px solid #f5c2c2", borderRadius: 4, color: "#c0392b" }}>
