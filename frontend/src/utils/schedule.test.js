@@ -7,6 +7,7 @@ import {
   buildCalendarEvents,
   createDefaultMajorHolidayBlocks,
   createTypicalVacations,
+  createTestCallAvoidRequests,
   expandDateRanges,
   getCallType,
   listCandidateVacationWeeks,
@@ -71,5 +72,26 @@ describe("expandDateRanges", () => {
       "07/11/2026",
       "07/12/2026",
     ]);
+  });
+});
+
+describe("createTestCallAvoidRequests", () => {
+  test("creates between one and five mixed weekday and weekend requests across the year", () => {
+    const majorHolidayBlocks = createDefaultMajorHolidayBlocks();
+    const randomSpy = jest.spyOn(Math, "random")
+      .mockReturnValueOnce(0.6)
+      .mockReturnValue(0.1);
+
+    try {
+      const requests = createTestCallAvoidRequests(INITIAL_ROSTER, DEFAULT_WINDOW.start, DEFAULT_WINDOW.end, majorHolidayBlocks);
+      const flattened = Object.values(requests).flat();
+
+      expect(flattened.length).toBeGreaterThanOrEqual(1);
+      expect(flattened.length).toBeLessThanOrEqual(5);
+      expect(flattened.some((range) => range.from === range.to)).toBe(true);
+      expect(flattened.some((range) => range.from !== range.to)).toBe(true);
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 });

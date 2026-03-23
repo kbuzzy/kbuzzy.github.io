@@ -19,6 +19,7 @@ import {
   createDefaultPreferenceState,
   createDefaultVacations,
   createRandomPreferenceState,
+  createTestCallAvoidRequests,
   createTypicalVacations,
   expandDateRanges,
   expandWeekRanges,
@@ -402,7 +403,7 @@ export function useScheduler() {
     setTestResult(null);
 
     const randomVacations = Object.fromEntries(roster.map((fellow) => [fellow.id, randomVacationWeeks(months)]));
-    const randomCallAvoidRequests = createDefaultCallAvoidRequests();
+    const randomCallAvoidRequests = createTestCallAvoidRequests(roster, start, end, majorHolidayBlocks);
     const randomBoardExamIds = sample(roster.map((fellow) => fellow.id), Math.floor(Math.random() * (roster.length + 1)));
     const randomExceptionMonths = sample(months.map((month) => month.key), 6).sort();
     const randomPreferences = createRandomPreferenceState(roster);
@@ -448,7 +449,7 @@ export function useScheduler() {
     } finally {
       setLoading(false);
     }
-  }, [apiConfigured, finalizeTestResult, maxRetryAttempts, months, retryUntilValid, roster, solveWithRetries]);
+  }, [apiConfigured, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, retryUntilValid, roster, solveWithRetries, start]);
 
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -460,7 +461,7 @@ export function useScheduler() {
 
     try {
       const typicalVacations = createTypicalVacations(roster, start, end, majorHolidayBlocks);
-      const typicalCallAvoidRequests = createDefaultCallAvoidRequests();
+      const typicalCallAvoidRequests = createTestCallAvoidRequests(roster, start, end, majorHolidayBlocks);
       const typicalBoardExamIds = roster.filter((fellow) => fellow.pgy === "PGY-4").map((fellow) => fellow.id);
       const typicalExceptionMonths = [...DEFAULT_PCICU_EXCEPTION_MONTHS];
       const typicalPreferences = createRandomPreferenceState(roster);
@@ -495,6 +496,7 @@ export function useScheduler() {
         0,
         "Board exams: both first-year fellows (PGY-4) only",
         "Vacation weeks: all fellows assigned distinct non-holiday weeks",
+        `Additional call-avoid requests: ${Object.values(typicalCallAvoidRequests).reduce((total, ranges) => total + ranges.length, 0)}`,
         `PICU exception months: ${typicalExceptionMonths.join(", ")}`,
       );
       setTestResult(nextResult);

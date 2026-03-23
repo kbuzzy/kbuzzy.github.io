@@ -384,6 +384,103 @@ export function createRandomPreferenceState(roster) {
   );
 }
 
+function buildProtectedDateSet(majorHolidayBlocks) {
+  const protectedDates = new Set();
+
+  HOLIDAY_WEEKENDS.forEach((item) => {
+    const cur = moment(item.start, DATE_FMT);
+    const last = moment(item.end, DATE_FMT);
+    while (cur.isSameOrBefore(last)) {
+      protectedDates.add(cur.format(DATE_FMT));
+      cur.add(1, "day");
+    }
+  });
+
+  Object.values(majorHolidayBlocks).forEach((halves) => {
+    halves.forEach((item) => {
+      const cur = moment(item.start, DATE_FMT);
+      const last = moment(item.end, DATE_FMT);
+      while (cur.isSameOrBefore(last)) {
+        protectedDates.add(cur.format(DATE_FMT));
+        cur.add(1, "day");
+      }
+    });
+  });
+
+  return protectedDates;
+}
+
+function listCandidateWeekdayCallAvoidDates(start, end, majorHolidayBlocks) {
+  const protectedDates = buildProtectedDateSet(majorHolidayBlocks);
+  const dates = [];
+  const cursor = moment(start, DATE_FMT);
+  const lastDate = moment(end, DATE_FMT);
+
+  while (cursor.isSameOrBefore(lastDate)) {
+    const dateStr = cursor.format(DATE_FMT);
+    if (cursor.day() >= 1 && cursor.day() <= 4 && !protectedDates.has(dateStr)) {
+      dates.push({ from: dateStr, to: dateStr, type: "weekday" });
+    }
+    cursor.add(1, "day");
+  }
+
+  return dates;
+}
+
+function listCandidateWeekendCallAvoidDates(start, end, majorHolidayBlocks) {
+  const protectedDates = buildProtectedDateSet(majorHolidayBlocks);
+  const weekends = [];
+  let cursor = moment(start, DATE_FMT).day(5);
+  const startDate = moment(start, DATE_FMT);
+  const lastDate = moment(end, DATE_FMT);
+
+  if (cursor.isBefore(startDate)) {
+    cursor.add(7, "days");
+  }
+
+  while (cursor.clone().add(2, "days").isSameOrBefore(lastDate)) {
+    const friday = cursor.format(DATE_FMT);
+    const saturday = cursor.clone().add(1, "day").format(DATE_FMT);
+    const sunday = cursor.clone().add(2, "day").format(DATE_FMT);
+    if (!protectedDates.has(friday) && !protectedDates.has(saturday) && !protectedDates.has(sunday)) {
+      weekends.push({ from: friday, to: sunday, type: "weekend" });
+    }
+    cursor.add(7, "days");
+  }
+
+  return weekends;
+}
+
+export function createTestCallAvoidRequests(roster, start, end, majorHolidayBlocks) {
+  const requests = createDefaultCallAvoidRequests();
+  const totalRequests = Math.floor(Math.random() * 5) + 1;
+  const weekdayCandidates = shuffle(listCandidateWeekdayCallAvoidDates(start, end, majorHolidayBlocks));
+  const weekendCandidates = shuffle(listCandidateWeekendCallAvoidDates(start, end, majorHolidayBlocks));
+
+  const selected = [];
+  if (weekendCandidates.length > 0) {
+    selected.push(weekendCandidates.shift());
+  }
+  if (selected.length < totalRequests && weekdayCandidates.length > 0) {
+    selected.push(weekdayCandidates.shift());
+  }
+
+  const combinedCandidates = shuffle([
+    ...weekdayCandidates,
+    ...weekendCandidates,
+  ]);
+  while (selected.length < totalRequests && combinedCandidates.length > 0) {
+    selected.push(combinedCandidates.shift());
+  }
+
+  selected.forEach((request) => {
+    const fellow = roster[Math.floor(Math.random() * roster.length)];
+    requests[fellow.id] = [...(requests[fellow.id] || []), { from: request.from, to: request.to }];
+  });
+
+  return requests;
+}
+
 export function moveItem(list, index, direction) {
   const next = [...list];
   const target = index + direction;
