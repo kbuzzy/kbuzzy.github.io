@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from .calendar_rules import idx, parse_iso
-from .constants import HOLIDAY_WEEKENDS, MONTH_KEYS
+from .constants import HOLIDAY_WEEKENDS
 
 
 def _build_holiday_date_set(major_half_info: list[dict]) -> set[int]:
@@ -48,6 +48,7 @@ def serialize_solution(
     rotation_index: dict[str, int],
     major_half_info: list[dict],
     exception_months: set[str],
+    month_keys: list[str],
 ) -> dict:
     holiday_ordinals = _build_holiday_date_set(major_half_info)
     schedule = []
@@ -66,7 +67,7 @@ def serialize_solution(
                 )
 
     rotations = []
-    for month_idx, month in enumerate(MONTH_KEYS):
+    for month_idx, month in enumerate(month_keys):
         for fellow_idx in range(len(fellows)):
             for rotation_name, rotation_slot in rotation_index.items():
                 if solver.value(rotation[(fellow_idx, month_idx, rotation_slot)]) == 1:

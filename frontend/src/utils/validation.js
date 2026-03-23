@@ -87,6 +87,10 @@ export function buildValidation(schedule, rotations, holidayWeekends, majorHolid
     monthKeys.push(monthCursor.format("YYYY-MM"));
     monthCursor.add(1, "month");
   }
+  const firstMonthKey = monthKeys[0];
+  const firstMonthLabel = firstMonthKey
+    ? moment(`${firstMonthKey}-01`, "YYYY-MM-DD").format("MMMM YYYY")
+    : "the first academic month";
 
   const fellows = roster?.map((item) => item.name.trim()).filter(Boolean)
     || Object.keys(rotationByFellowMonth)
@@ -105,10 +109,10 @@ export function buildValidation(schedule, rotations, holidayWeekends, majorHolid
       if (rotationName) {
         counts[rotationName] = (counts[rotationName] || 0) + 1;
       }
-      if (month === "2026-07") {
+      if (month === firstMonthKey) {
         const fellowRecord = roster?.find((item) => item.name.trim() === fellow);
         if (fellowRecord?.pgy === "PGY-4" && rotationName !== "imaging") {
-          julyImagingErrors.push(`${fellow} should be on imaging in 2026-07, got ${rotationName || "none"}`);
+          julyImagingErrors.push(`${fellow} should be on imaging in ${firstMonthKey}, got ${rotationName || "none"}`);
         }
       }
     });
@@ -178,7 +182,7 @@ export function buildValidation(schedule, rotations, holidayWeekends, majorHolid
     ok: julyImagingErrors.length === 0,
     label: "July first-year fellow imaging",
     detail: julyImagingErrors.length === 0
-      ? "Both first-year fellows (PGY-4) are on imaging in July 2026."
+      ? `Both first-year fellows (PGY-4) are on imaging in ${firstMonthLabel}.`
       : julyImagingErrors.slice(0, 3).join(" | "),
   });
   checks.push({

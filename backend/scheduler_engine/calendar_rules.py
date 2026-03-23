@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta
 
+from .academic_year import academic_year_start_year, build_month_keys, default_exception_tuesday_months
 from .constants import (
-    DEFAULT_EXCEPTION_TUESDAY_MONTHS,
     DEFAULT_MAJOR_HOLIDAYS,
     HOLIDAY_WEEKENDS,
-    MONTH_KEYS,
     PGY_ROTATION_TARGETS,
     PGY_WEEKEND_TARGETS,
     REQUIRED_PGY_COUNTS,
@@ -66,15 +65,15 @@ def validate_schedule_inputs(
 ) -> tuple[dict[str, list[dict[str, str]]], set[str]]:
     if len(fellows) != 6:
         raise ValueError("the schedule must include exactly 6 fellows")
-    if start_date.strftime("%Y-%m-%d") != "2026-07-01" or end_date.strftime("%Y-%m-%d") != "2027-06-30":
-        raise ValueError("the current rules require the window 07/01/2026 through 06/30/2027")
+    start_year = academic_year_start_year(start_date, end_date)
+    month_keys = build_month_keys(start_year)
 
     if not pcicu_exception_months:
-        pcicu_exception_months = sorted(DEFAULT_EXCEPTION_TUESDAY_MONTHS)
+        pcicu_exception_months = sorted(default_exception_tuesday_months(start_year))
     exception_tuesday_months = set(pcicu_exception_months)
     if len(exception_tuesday_months) != 6:
         raise ValueError("exactly 6 PCICU exception months must be selected")
-    invalid_exception_months = exception_tuesday_months.difference(MONTH_KEYS)
+    invalid_exception_months = exception_tuesday_months.difference(month_keys)
     if invalid_exception_months:
         raise ValueError("pcicu exception months must fall within the academic year window")
 

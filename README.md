@@ -6,9 +6,10 @@ The current codebase is organized around a backend scheduling engine that owns t
 
 ## Scheduling Model
 
-The solver currently supports one fixed academic year:
+Each academic year is defined as:
 
-- `07/01/2026` through `06/30/2027`
+- start: July 1
+- end: June 30 of the following calendar year
 
 The roster is also fixed at six fellows:
 
@@ -41,7 +42,7 @@ High-level rotation rules:
 - Every fellow receives exactly one rotation per month.
 - `consult`, `cath`, `pcicu`, and `achd_ep` are single-slot monthly assignments.
 - `imaging` and `research` can hold multiple fellows in the same month.
-- Both `PGY-4` fellows must be on imaging in July 2026.
+- Both `PGY-4` fellows must be on imaging in the first month of the academic year.
 - Non-research rotations cannot repeat in consecutive months.
 - Research can repeat, but no fellow may have more than two consecutive research months.
 - October board exam fellows are biased toward lighter October rotations when feasible.
@@ -114,7 +115,8 @@ The backend entrypoint is [backend/main.py](/Users/kilianburke/Desktop/fellowshi
 
 The scheduling engine lives in [backend/scheduler_engine](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine):
 
-- [constants.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/constants.py): fixed academic-year constants, quotas, holiday definitions, and PGY targets
+- [constants.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/constants.py): stable program constants such as quotas, weights, and PGY targets
+- [year_config.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/year_config.py): current academic-year holiday and major-holiday date defaults
 - [calendar_rules.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/calendar_rules.py): input validation, holiday normalization, and block construction
 - [rotation_rules.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/rotation_rules.py): monthly rotation constraints and helper logic
 - [objective.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/objective.py): fairness and preference objective construction

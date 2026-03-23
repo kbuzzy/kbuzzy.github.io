@@ -10,15 +10,53 @@ export const MAX_VACATION_WEEKS = 4;
 export const STORAGE_KEY = "fellowship-scheduler-state";
 export const STORAGE_VERSION = 2;
 export const DEFAULT_RETRY_MAX_ATTEMPTS = 8;
+export const CURRENT_ACADEMIC_YEAR_CONFIG = {
+  startYear: 2026,
+  holidayWeekends: [
+    { label: "July 4", start: "07/03/2026", end: "07/06/2026" },
+    { label: "Labor Day", start: "09/04/2026", end: "09/07/2026" },
+    { label: "MLK Day", start: "01/15/2027", end: "01/18/2027" },
+    { label: "Good Friday", start: "03/25/2027", end: "03/28/2027" },
+    { label: "Memorial Day", start: "05/28/2027", end: "05/31/2027" },
+    { label: "Juneteenth", start: "06/18/2027", end: "06/21/2027" },
+  ],
+  majorHolidayBlocks: {
+    Thanksgiving: [
+      { label: "Thanksgiving A", start: "11/25/2026", end: "11/26/2026" },
+      { label: "Thanksgiving B", start: "11/27/2026", end: "11/29/2026" },
+    ],
+    Christmas: [
+      { label: "Christmas A", start: "12/22/2026", end: "12/24/2026" },
+      { label: "Christmas B", start: "12/25/2026", end: "12/27/2026" },
+    ],
+    "New Year's": [
+      { label: "New Year's A", start: "12/28/2026", end: "12/30/2026" },
+      { label: "New Year's B", start: "12/31/2026", end: "01/03/2027" },
+    ],
+  },
+};
 
-export const DEFAULT_PCICU_EXCEPTION_MONTHS = [
-  "2026-08",
-  "2026-11",
-  "2027-01",
-  "2027-02",
-  "2027-04",
-  "2027-05",
-];
+export const DEFAULT_ACADEMIC_YEAR_START = CURRENT_ACADEMIC_YEAR_CONFIG.startYear;
+
+export function academicYearWindow(startYear = DEFAULT_ACADEMIC_YEAR_START) {
+  return {
+    start: `07/01/${startYear}`,
+    end: `06/30/${startYear + 1}`,
+  };
+}
+
+export function defaultPcicuExceptionMonths(startYear = DEFAULT_ACADEMIC_YEAR_START) {
+  return [
+    `${startYear}-08`,
+    `${startYear}-11`,
+    `${startYear + 1}-01`,
+    `${startYear + 1}-02`,
+    `${startYear + 1}-04`,
+    `${startYear + 1}-05`,
+  ];
+}
+
+export const DEFAULT_PCICU_EXCEPTION_MONTHS = defaultPcicuExceptionMonths();
 
 export const PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"];
 
@@ -37,31 +75,11 @@ export const PGY_ROTATION_TARGETS = {
   "PGY-6": { consult: 1, pcicu: 1, cath: 1, imaging: 1, research: 7, achd_ep: 1 },
 };
 
-export const HOLIDAY_WEEKENDS = [
-  { label: "July 4", start: "07/03/2026", end: "07/06/2026" },
-  { label: "Labor Day", start: "09/04/2026", end: "09/07/2026" },
-  { label: "MLK Day", start: "01/15/2027", end: "01/18/2027" },
-  { label: "Good Friday", start: "03/25/2027", end: "03/28/2027" },
-  { label: "Memorial Day", start: "05/28/2027", end: "05/31/2027" },
-  { label: "Juneteenth", start: "06/18/2027", end: "06/21/2027" },
-];
+export const HOLIDAY_WEEKENDS = CURRENT_ACADEMIC_YEAR_CONFIG.holidayWeekends;
 
 export const MAJOR_HOLIDAYS = ["Thanksgiving", "Christmas", "New Year's"];
 
-export const DEFAULT_MAJOR_HOLIDAY_BLOCKS = {
-  Thanksgiving: [
-    { label: "Thanksgiving A", start: "11/25/2026", end: "11/26/2026" },
-    { label: "Thanksgiving B", start: "11/27/2026", end: "11/29/2026" },
-  ],
-  Christmas: [
-    { label: "Christmas A", start: "12/22/2026", end: "12/24/2026" },
-    { label: "Christmas B", start: "12/25/2026", end: "12/27/2026" },
-  ],
-  "New Year's": [
-    { label: "New Year's A", start: "12/28/2026", end: "12/30/2026" },
-    { label: "New Year's B", start: "12/31/2026", end: "01/03/2027" },
-  ],
-};
+export const DEFAULT_MAJOR_HOLIDAY_BLOCKS = CURRENT_ACADEMIC_YEAR_CONFIG.majorHolidayBlocks;
 
 export const HOLIDAY_WEEKEND_OPTIONS = HOLIDAY_WEEKENDS.map((item) => item.label);
 

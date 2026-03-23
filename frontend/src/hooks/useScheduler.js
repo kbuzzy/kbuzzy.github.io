@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import moment from "moment";
 
 import {
+  academicYearWindow,
   API_URL,
   DATE_FMT,
   DEFAULT_PCICU_EXCEPTION_MONTHS,
@@ -59,10 +60,11 @@ function getValidationForResult(data, start, end, exceptionMonths, roster) {
 }
 
 export function useScheduler() {
+  const defaultWindow = academicYearWindow();
   const storedState = useMemo(() => readStoredState(), []);
   const [roster, setRoster] = useState(storedState?.roster || INITIAL_ROSTER);
-  const [start, setStart] = useState(storedState?.start || "07/01/2026");
-  const [end, setEnd] = useState(storedState?.end || "06/30/2027");
+  const [start, setStart] = useState(storedState?.start || defaultWindow.start);
+  const [end, setEnd] = useState(storedState?.end || defaultWindow.end);
   const [vacations, setVacations] = useState(storedState?.vacations || createDefaultVacations);
   const [boardExamIds, setBoardExamIds] = useState(storedState?.boardExamIds || []);
   const [holidayPreferences, setHolidayPreferences] = useState(
@@ -83,7 +85,7 @@ export function useScheduler() {
   const [loadingMode, setLoadingMode] = useState({ kind: "generate", attempt: 1, totalAttempts: 1 });
   const [error, setError] = useState(null);
   const [testResult, setTestResult] = useState(storedState?.testResult || null);
-  const [calendarDate, setCalendarDate] = useState(() => moment("07/01/2026", DATE_FMT).toDate());
+  const [calendarDate, setCalendarDate] = useState(() => moment(defaultWindow.start, DATE_FMT).toDate());
   const [activeTab, setActiveTab] = useState("scheduler");
   const [backendStatus, setBackendStatus] = useState(storedState?.backendStatus || (API_URL ? "error" : "unconfigured"));
   const [backendChecking, setBackendChecking] = useState(Boolean(API_URL));
@@ -511,8 +513,8 @@ export function useScheduler() {
     }
 
     setRoster(INITIAL_ROSTER);
-    setStart("07/01/2026");
-    setEnd("06/30/2027");
+    setStart(defaultWindow.start);
+    setEnd(defaultWindow.end);
     setVacations(createDefaultVacations());
     setBoardExamIds([]);
     setHolidayPreferences(createDefaultPreferenceState());
@@ -527,11 +529,11 @@ export function useScheduler() {
     setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: 1 });
     setError(null);
     setTestResult(null);
-    setCalendarDate(moment("07/01/2026", DATE_FMT).toDate());
+    setCalendarDate(moment(defaultWindow.start, DATE_FMT).toDate());
     setActiveTab("scheduler");
     setRetryUntilValid(false);
     setMaxRetryAttempts(DEFAULT_RETRY_MAX_ATTEMPTS);
-  }, []);
+  }, [defaultWindow.end, defaultWindow.start]);
 
   return {
     activeTab,

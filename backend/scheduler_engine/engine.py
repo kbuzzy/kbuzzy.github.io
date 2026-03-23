@@ -2,13 +2,13 @@ from datetime import datetime, timedelta
 
 from ortools.sat.python import cp_model
 
+from .academic_year import academic_year_start_year, build_month_keys, october_month_key
 from .calendar_rules import build_call_blocks, idx, month_key, parse_iso, validate_schedule_inputs
 from .constants import (
     CATH_THURSDAY_WEIGHT,
     DIFFICULT_ROTATION_STREAK_WEIGHT,
     HOLIDAY_WEEKENDS,
     MAX_SOLVER_SECONDS,
-    MONTH_KEYS,
     OCTOBER_BOARD_WEIGHT,
     PGY_PREFERENCE_WEIGHTS,
     PGY_WEEKEND_TARGETS,
@@ -47,17 +47,19 @@ def generate_schedule(
 
     days = (end_date - start_date).days + 1
     fellow_count = len(fellows)
-    month_index = {month: month_idx for month_idx, month in enumerate(MONTH_KEYS)}
+    start_year = academic_year_start_year(start_date, end_date)
+    month_keys = build_month_keys(start_year)
+    month_index = {month: month_idx for month_idx, month in enumerate(month_keys)}
     rotation_index = {rotation: rotation_idx for rotation_idx, rotation in enumerate(ROTATIONS)}
     month_dates = [month_key(start_date + timedelta(days=day_idx)) for day_idx in range(days)]
 
     model = cp_model.CpModel()
     rotation = {
         (fellow_idx, month_idx, rotation_idx): model.new_bool_var(
-            f"rot_{fellows[fellow_idx]}_{MONTH_KEYS[month_idx]}_{ROTATIONS[rotation_idx]}"
+            f"rot_{fellows[fellow_idx]}_{month_keys[month_idx]}_{ROTATIONS[rotation_idx]}"
         )
         for fellow_idx in range(fellow_count)
-        for month_idx in range(len(MONTH_KEYS))
+        for month_idx in range(len(month_keys))
         for rotation_idx in range(len(ROTATIONS))
     }
     call = {
@@ -72,15 +74,18 @@ def generate_schedule(
         fellow_count=fellow_count,
         rotation_index=rotation_index,
         month_index=month_index,
+        month_keys=month_keys,
         pgy_years=pgy_years,
         fellows=fellows,
         exception_tuesday_months=exception_tuesday_months,
+        start_year=start_year,
     )
     hard_month = build_hard_month_vars(
         model=model,
         rotation=rotation,
         fellow_count=fellow_count,
         rotation_index=rotation_index,
+        month_keys=month_keys,
     )
 
     call_blocks = build_call_blocks(start_date, end_date, major_holidays)
@@ -200,7 +205,7 @@ def generate_schedule(
         ]
         model.add(sum(call[(fellow_idx, start_idx)] for fellow_idx in range(fellow_count) for start_idx in holiday_starts) == 2)
 
-    october_idx = month_index["2026-10"]
+    october_idx = month_index[october_month_key(start_year)]
     soft_terms = []
     for fellow in board_exam_fellows:
         if fellow not in fellows:
@@ -256,7 +261,7 @@ def generate_schedule(
             model.add(call[(fellow_idx, day_idx)] + call[(fellow_idx, next_day)] <= 1)
 
     for fellow_idx in range(fellow_count):
-        for month_idx in range(len(MONTH_KEYS) - 2):
+        for month_idx in range(len(month_keys) - 2):
             hard_run = model.new_bool_var(f"hard_run_{fellow_idx}_{month_idx}")
             model.add(hard_run <= hard_month[(fellow_idx, month_idx)])
             model.add(hard_run <= hard_month[(fellow_idx, month_idx + 1)])
@@ -274,6 +279,7 @@ def generate_schedule(
         start_date=start_date,
         holiday_block_starts=holiday_block_starts,
         major_half_info=major_half_info,
+        month_count=len(month_keys),
     )
 
     solver = cp_model.CpSolver()
@@ -294,6 +300,7 @@ def generate_schedule(
         rotation_index,
         major_half_info,
         exception_tuesday_months,
+        month_keys,
     )
     result["validation"] = build_validation(
         schedule=result["schedule"],
@@ -305,5 +312,7 @@ def generate_schedule(
         exception_months=sorted(exception_tuesday_months),
         fellows=fellows,
         pgy_years=pgy_years,
+        month_keys=month_keys,
+        start_year=start_year,
     )
     return result

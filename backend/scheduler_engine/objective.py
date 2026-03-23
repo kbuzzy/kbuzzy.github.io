@@ -5,7 +5,6 @@ from .constants import (
     DEFAULT_MAJOR_HOLIDAYS,
     DIFFICULT_ROTATION_STREAK_WEIGHT,
     HOLIDAY_WEEKENDS,
-    MONTH_KEYS,
     OCTOBER_BOARD_WEIGHT,
     PGY_PREFERENCE_WEIGHTS,
 )
@@ -21,6 +20,7 @@ def configure_objective(
     start_date: datetime,
     holiday_block_starts: set[int],
     major_half_info: list[dict],
+    month_count: int,
 ):
     ordered_in_house_days = sorted(in_house_days)
     in_house_counts = [sum(call[(fellow_idx, day_idx)] for day_idx in ordered_in_house_days) for fellow_idx in range(fellow_count)]
@@ -60,7 +60,7 @@ def configure_objective(
         for day_idx in range(days)
         if (start_date + timedelta(days=day_idx)).weekday() == 3 and day_idx not in holiday_block_starts
     )
-    difficult_streak_soft_bound = DIFFICULT_ROTATION_STREAK_WEIGHT * fellow_count * max(0, len(MONTH_KEYS) - 2)
+    difficult_streak_soft_bound = DIFFICULT_ROTATION_STREAK_WEIGHT * fellow_count * max(0, month_count - 2)
     soft_score_span = (
         board_exam_soft_bound
         + major_preference_soft_bound

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
-from .constants import DEFAULT_MAJOR_HOLIDAYS, HOLIDAY_WEEKENDS, MONTH_KEYS, PGY_ROTATION_TARGETS
+from .academic_year import first_month_key
+from .constants import DEFAULT_MAJOR_HOLIDAYS, HOLIDAY_WEEKENDS, PGY_ROTATION_TARGETS
 
 DATE_FMT = "%m/%d/%Y"
 
@@ -19,6 +20,8 @@ def build_validation(
     exception_months: list[str],
     fellows: list[str],
     pgy_years: dict[str, str],
+    month_keys: list[str],
+    start_year: int,
 ) -> list[dict]:
     if not schedule:
         return []
@@ -92,7 +95,7 @@ def build_validation(
 
     for fellow in fellows:
         counts: dict[str, int] = {}
-        for month in MONTH_KEYS:
+        for month in month_keys:
             fellow_month_key = f"{fellow}::{month}"
             rotation_name = rotation_by_fellow_month.get(fellow_month_key)
             month_count = rotation_count_by_fellow_month.get(fellow_month_key, 0)
@@ -100,8 +103,8 @@ def build_validation(
                 rotation_coverage_errors.append(f"{fellow} has {month_count} rotations in {month}")
             if rotation_name:
                 counts[rotation_name] = counts.get(rotation_name, 0) + 1
-            if month == "2026-07" and pgy_years.get(fellow) == "PGY-4" and rotation_name != "imaging":
-                july_imaging_errors.append(f"{fellow} should be on imaging in 2026-07, got {rotation_name or 'none'}")
+            if month == first_month_key(start_year) and pgy_years.get(fellow) == "PGY-4" and rotation_name != "imaging":
+                july_imaging_errors.append(f"{fellow} should be on imaging in {first_month_key(start_year)}, got {rotation_name or 'none'}")
 
         fellow_pgy = pgy_years.get(fellow)
         if fellow_pgy in PGY_ROTATION_TARGETS:
@@ -110,16 +113,16 @@ def build_validation(
                 if actual != expected:
                     rotation_quota_errors.append(f"{fellow} has {actual} {rotation_name} months, expected {expected}")
 
-        for month_idx, month in enumerate(MONTH_KEYS):
+        for month_idx, month in enumerate(month_keys):
             if month_idx == 0:
                 continue
             current_rotation = rotation_by_fellow_month.get(f"{fellow}::{month}")
-            previous_rotation = rotation_by_fellow_month.get(f"{fellow}::{MONTH_KEYS[month_idx - 1]}")
+            previous_rotation = rotation_by_fellow_month.get(f"{fellow}::{month_keys[month_idx - 1]}")
             if current_rotation and current_rotation == previous_rotation and current_rotation != "research":
-                consecutive_rotation_errors.append(f"{fellow} repeated {current_rotation} in {MONTH_KEYS[month_idx - 1]} and {month}")
+                consecutive_rotation_errors.append(f"{fellow} repeated {current_rotation} in {month_keys[month_idx - 1]} and {month}")
 
         run_length = 0
-        for month in MONTH_KEYS:
+        for month in month_keys:
             if rotation_by_fellow_month.get(f"{fellow}::{month}") == "research":
                 run_length += 1
                 if run_length > 2:
@@ -127,7 +130,7 @@ def build_validation(
             else:
                 run_length = 0
 
-    for month in MONTH_KEYS:
+    for month in month_keys:
         consult_count = rotation_count_by_month_type.get(f"{month}::consult", 0)
         cath_count = rotation_count_by_month_type.get(f"{month}::cath", 0)
         pcicu_count = rotation_count_by_month_type.get(f"{month}::pcicu", 0)
@@ -157,7 +160,7 @@ def build_validation(
     checks.append({
         "ok": len(july_imaging_errors) == 0,
         "label": "July first-year fellow imaging",
-        "detail": "Both first-year fellows (PGY-4) are on imaging in July 2026." if not july_imaging_errors else " | ".join(july_imaging_errors[:3]),
+        "detail": f"Both first-year fellows (PGY-4) are on imaging in {datetime.strptime(first_month_key(start_year), '%Y-%m').strftime('%B %Y')}." if not july_imaging_errors else " | ".join(july_imaging_errors[:3]),
     })
     checks.append({
         "ok": len(rotation_quota_errors) == 0,
