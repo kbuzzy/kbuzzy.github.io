@@ -87,6 +87,24 @@ export default function App() {
   const exceptionMonthSummary = `${pcicuExceptionMonths.length}/6 selected`;
   const holidayBlockSummary = `${Object.values(majorHolidayBlocks).flat().length} date ranges`;
   const holidayPreferenceSummary = `${roster.length} fellows ranked`;
+  const [showScrollTop, setShowScrollTop] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 260);
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   return (
     <div style={{ padding: 24, maxWidth: 1150, margin: "0 auto", fontFamily: "sans-serif" }}>
@@ -331,6 +349,26 @@ export default function App() {
         )
       ) : (
         <RulesValidationTab checks={validation} error={error} />
+      )}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          aria-label="Return to top"
+          title="Return to top"
+          style={{
+            ...btnStyle,
+            position: "fixed",
+            right: 20,
+            bottom: 20,
+            zIndex: 20,
+            borderRadius: 999,
+            padding: "10px 14px",
+            boxShadow: "0 8px 20px rgba(15, 23, 42, 0.18)",
+            background: "#1f4f7a",
+          }}
+        >
+          ↑ Top
+        </button>
       )}
     </div>
   );

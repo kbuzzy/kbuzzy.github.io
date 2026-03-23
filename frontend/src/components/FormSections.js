@@ -171,15 +171,37 @@ export function CollapsibleSection({ title, summary, defaultOpen = false, childr
           listStyle: "none",
           cursor: "pointer",
           padding: "12px 14px",
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto",
           alignItems: "center",
-          justifyContent: "space-between",
           gap: 12,
           background: "#f8fafc",
           fontWeight: 700,
         }}
       >
-        <span>{title}</span>
+        <span
+          aria-hidden="true"
+          style={{
+            width: 26,
+            height: 26,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: "50%",
+            background: "#e8eef7",
+            color: "#24415d",
+            fontSize: 14,
+            flex: "0 0 auto",
+          }}
+        >
+          ▾
+        </span>
+        <span>
+          <span style={{ display: "block" }}>{title}</span>
+          <span style={{ display: "block", marginTop: 2, fontSize: 11, fontWeight: 500, color: "#667085" }}>
+            Click to expand or collapse
+          </span>
+        </span>
         {summary && (
           <span style={{ fontSize: 12, fontWeight: 500, color: "#5b6470" }}>
             {summary}
@@ -545,11 +567,16 @@ export function LoadingPanel({ loading, mode }) {
   return (
     <div
       style={{
-        marginBottom: 20,
+        position: "fixed",
+        top: 84,
+        right: 20,
+        width: "min(420px, calc(100vw - 40px))",
+        zIndex: 30,
         padding: 16,
         background: "#eef6ff",
         border: "1px solid #b6d4fe",
         borderRadius: 8,
+        boxShadow: "0 14px 28px rgba(29, 78, 216, 0.16)",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
