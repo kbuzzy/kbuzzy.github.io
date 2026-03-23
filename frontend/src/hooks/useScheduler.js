@@ -503,6 +503,34 @@ export function useScheduler() {
     pcicuExceptionMonths,
   ), [end, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, roster, schedule, start, vacations]);
 
+  const resetSavedState = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+
+    setRoster(INITIAL_ROSTER);
+    setStart("07/01/2026");
+    setEnd("06/30/2027");
+    setVacations(createDefaultVacations());
+    setBoardExamIds([]);
+    setHolidayPreferences(createDefaultPreferenceState());
+    setMajorHolidayBlocks(createDefaultMajorHolidayBlocks());
+    setPcicuExceptionMonths(DEFAULT_PCICU_EXCEPTION_MONTHS);
+    setSchedule([]);
+    setRotations([]);
+    setHolidayWeekends([]);
+    setMajorHolidays([]);
+    setValidation([]);
+    setLoading(false);
+    setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: 1 });
+    setError(null);
+    setTestResult(null);
+    setCalendarDate(moment("07/01/2026", DATE_FMT).toDate());
+    setActiveTab("scheduler");
+    setRetryUntilValid(false);
+    setMaxRetryAttempts(DEFAULT_RETRY_MAX_ATTEMPTS);
+  }, []);
+
   return {
     activeTab,
     apiConfigured,
@@ -527,6 +555,7 @@ export function useScheduler() {
     pcicuExceptionMonths,
     retryUntilValid,
     roster,
+    resetSavedState,
     rotations,
     runRandomTest,
     runTypicalTest,

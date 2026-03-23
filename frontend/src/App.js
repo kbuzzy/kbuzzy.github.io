@@ -54,6 +54,7 @@ export default function App() {
     pcicuExceptionMonths,
     retryUntilValid,
     roster,
+    resetSavedState,
     rotations,
     runRandomTest,
     runTypicalTest,
@@ -200,6 +201,13 @@ export default function App() {
                 style={{ ...btnStyle, background: "#1d6f42", opacity: loading || !apiConfigured ? 0.6 : 1 }}
               >
                 Run Typical Schedule Test
+              </button>
+              <button
+                onClick={resetSavedState}
+                disabled={loading}
+                style={{ ...btnStyle, background: "#c0392b", opacity: loading ? 0.6 : 1 }}
+              >
+                Reset saved state
               </button>
               {schedule.length > 0 && (
                 <button
