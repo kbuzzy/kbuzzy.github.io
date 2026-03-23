@@ -170,6 +170,8 @@ export function InHouseCallSummary({ roster, schedule, exceptionMonths, majorHol
 export function ValidationPanel({ checks }) {
   if (!checks?.length) return null;
   const allOk = checks.every((check) => check.ok);
+  const failedChecks = checks.filter((check) => !check.ok);
+  const passedChecks = checks.filter((check) => check.ok);
   return (
     <div style={{ marginBottom: 20, border: "1px solid #dee2e6", borderRadius: 8, overflow: "hidden" }}>
       <div
@@ -181,33 +183,61 @@ export function ValidationPanel({ checks }) {
           borderBottom: "1px solid #dee2e6",
         }}
       >
-        Schedule validation summary
+        <div>Schedule validation summary</div>
+        <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600 }}>
+          {failedChecks.length === 0
+            ? `All ${checks.length} checks are passing.`
+            : `${failedChecks.length} of ${checks.length} checks need attention.`}
+        </div>
       </div>
       <div style={{ background: "#fff" }}>
-        {checks.map((check) => (
+        {failedChecks.map((check) => (
           <div
             key={check.label}
             style={{
               padding: "10px 16px",
               borderBottom: "1px solid #f0f0f0",
-              background: check.ok ? "#fff" : "#fde8e8",
-              borderLeft: check.ok ? "4px solid transparent" : "4px solid #c0392b",
+              background: "#fde8e8",
+              borderLeft: "4px solid #c0392b",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontWeight: 700, color: check.ok ? "#155724" : "#c0392b" }}>
-                {check.ok ? "Passing" : "Needs attention"}
+              <span style={{ fontWeight: 700, color: "#c0392b" }}>
+                Needs attention
               </span>
               <span style={{ fontWeight: 600 }}>{check.label}</span>
             </div>
             <div>{check.detail}</div>
-            {!check.ok && check.suggestion && (
+            {check.suggestion && (
               <div style={{ marginTop: 6, fontSize: 13, color: "#7a1f1f" }}>
                 Try: {check.suggestion}
               </div>
             )}
           </div>
         ))}
+        {passedChecks.length > 0 && (
+          <details style={{ padding: "10px 16px" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600, color: "#155724" }}>
+              View {passedChecks.length} passing check{passedChecks.length === 1 ? "" : "s"}
+            </summary>
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              {passedChecks.map((check) => (
+                <div
+                  key={check.label}
+                  style={{
+                    padding: "8px 10px",
+                    background: "#f7fbf8",
+                    border: "1px solid #d7eadc",
+                    borderRadius: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, color: "#155724" }}>{check.label}</div>
+                  <div style={{ marginTop: 2, fontSize: 13, color: "#355070" }}>{check.detail}</div>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
       </div>
     </div>
   );

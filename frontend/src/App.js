@@ -87,6 +87,10 @@ export default function App() {
   const exceptionMonthSummary = `${pcicuExceptionMonths.length}/6 selected`;
   const holidayBlockSummary = `${Object.values(majorHolidayBlocks).flat().length} date ranges`;
   const holidayPreferenceSummary = `${roster.length} fellows ranked`;
+  const inHouseCountSummary = `${roster.length} fellows`;
+  const rotationSummary = `${months.length} months`;
+  const holidayWeekendSummary = `${holidayWeekends.length} assigned`;
+  const majorHolidaySummary = `${majorHolidays.length} half-blocks`;
   const [showScrollTop, setShowScrollTop] = React.useState(false);
 
   React.useEffect(() => {
@@ -118,7 +122,10 @@ export default function App() {
           to { transform: rotate(360deg); }
         }
       `}</style>
-      <h1 style={{ marginBottom: 20 }}>Fellowship Scheduler</h1>
+      <h1 style={{ marginBottom: 4 }}>Fellowship Scheduler</h1>
+      <div style={{ marginBottom: 16, fontSize: 13, color: "#5b6470" }}>
+        Created by Kilian Burke
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {["scheduler", "calendar", "rules"].map((tab) => (
@@ -135,10 +142,11 @@ export default function App() {
         ))}
       </div>
 
+      <LoadingPanel loading={loading} mode={loadingMode} />
+
       {activeTab === "scheduler" ? (
         <>
           <BackendStatusBadge status={backendStatus} checking={backendChecking} apiUrl={API_URL} onRetry={checkBackend} />
-          <LoadingPanel loading={loading} mode={loadingMode} />
           <TestResultPanel result={testResult} />
           <div style={{ background: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <div style={{ marginBottom: 16, background: "#fff", border: "1px solid #e0e0e0", borderRadius: 6, padding: 12 }}>
@@ -323,10 +331,6 @@ export default function App() {
             <BackendStatusBadge status={backendStatus} checking={backendChecking} apiUrl={API_URL} onRetry={checkBackend} />
             <TestResultPanel result={testResult} />
             <ValidationPanel checks={validation} />
-            <RotationTable roster={roster} rotations={rotations} months={months} />
-            <InHouseCallSummary roster={roster} schedule={schedule} exceptionMonths={pcicuExceptionMonths} majorHolidayBlocks={majorHolidayBlocks} />
-            <MajorHolidayTable majorHolidays={majorHolidays} />
-            <HolidayWeekendTable holidayWeekends={holidayWeekends} />
 
             <Calendar
               localizer={localizer}
@@ -345,6 +349,24 @@ export default function App() {
               date={calendarDate}
               onNavigate={setCalendarDate}
             />
+
+            <div style={{ marginTop: 16 }}>
+              <CollapsibleSection title="In-House Call Totals" summary={inHouseCountSummary} defaultOpen={false}>
+                <InHouseCallSummary roster={roster} schedule={schedule} exceptionMonths={pcicuExceptionMonths} majorHolidayBlocks={majorHolidayBlocks} />
+              </CollapsibleSection>
+
+              <CollapsibleSection title="Monthly Rotations" summary={rotationSummary} defaultOpen={false}>
+                <RotationTable roster={roster} rotations={rotations} months={months} />
+              </CollapsibleSection>
+
+              <CollapsibleSection title="Holiday Weekends" summary={holidayWeekendSummary} defaultOpen={false}>
+                <HolidayWeekendTable holidayWeekends={holidayWeekends} />
+              </CollapsibleSection>
+
+              <CollapsibleSection title="Major Holiday Halves" summary={majorHolidaySummary} defaultOpen={false}>
+                <MajorHolidayTable majorHolidays={majorHolidays} />
+              </CollapsibleSection>
+            </div>
           </>
         )
       ) : (
