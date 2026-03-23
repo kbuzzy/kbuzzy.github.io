@@ -1684,12 +1684,25 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
       const endMoment = moment(majorHoliday.end, DATE_FMT);
       const dates = [];
       const tmp = cur.clone();
+
+      // Mirror solver logic: only count halves containing a Friday
+      // toward the consecutive-weekend sequence check
+      let containsFriday = false;
+      const scan = cur.clone();
+      while (scan.isSameOrBefore(endMoment)) {
+        if (scan.day() === 5) { containsFriday = true; break; }
+        scan.add(1, "day");
+      }
+
       while (tmp.isSameOrBefore(endMoment)) {
         dates.push(byDate[tmp.format(DATE_FMT)]);
         tmp.add(1, "day");
       }
       if (new Set(dates).size !== 1) {
         majorHolidayErrors.push(`${majorHoliday.label}: holiday half does not stay with one fellow`);
+      }
+      if (containsFriday && dates[0]) {
+        weekendAssignments.push({ start: dateStr, fellow: dates[0], label: majorHoliday.label });
       }
     } else if (
       cur.day() === 5 &&

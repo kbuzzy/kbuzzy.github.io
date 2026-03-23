@@ -390,7 +390,7 @@ def generate_schedule(
         m = month_index[month]
         for f in range(n):
             model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["consult"])] <= 1)
-            if start_idx in weekend_block_starts:
+            if start_idx in weekend_block_starts or start_idx in major_block_starts:  # <-- add major_block_starts
                 model.add(call[(f, start_idx)] + rotation[(f, m, rotation_index["pcicu"])] <= 1)
 
     holiday_call_starts = holiday_block_starts.union(major_block_starts)
@@ -417,14 +417,25 @@ def generate_schedule(
         next_day = d + 1
         date = start_date + timedelta(days=d)
         next_date = start_date + timedelta(days=next_day)
-        if day_to_block_start.get(d) is not None and day_to_block_start.get(d) == day_to_block_start.get(next_day):
+        month = month_dates[d]
+
+        # Skip days that belong to the same protected block
+        if (
+            day_to_block_start.get(d) is not None
+            and day_to_block_start.get(d) == day_to_block_start.get(next_day)
+        ):
+            continue
+
+        # Allow consult fellow to cover Mon+Tue in exception months
+        if (
+            date.weekday() == 0
+            and next_date.weekday() == 1
+            and month in exception_tuesday_months
+        ):
             continue
 
         for f in range(n):
-            if d in in_house_days and next_day in in_house_days:
-                model.add(call[(f, d)] + call[(f, next_day)] <= 1)
-            if next_day in holiday_call_starts:
-                model.add(call[(f, d)] + call[(f, next_day)] <= 1)
+            model.add(call[(f, d)] + call[(f, next_day)] <= 1)
 
     for f, fellow in enumerate(fellows):
         target = PGY_WEEKEND_TARGETS[pgy_years[fellow]]
