@@ -147,6 +147,7 @@ def generate_schedule(
     holiday_preferences: dict[str, dict[str, list[str]]],
     major_holiday_blocks: dict | None,
     pcicu_exception_months: list[str],
+    solver_seed: int | None = None,
 ) -> dict:
     del holidays
 
@@ -553,6 +554,9 @@ def generate_schedule(
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = MAX_SOLVER_SECONDS
+    if solver_seed is not None:
+        solver.parameters.random_seed = solver_seed
+        solver.parameters.randomize_search = True
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError("No feasible schedule found for the current rotation, vacation, and call rules.")

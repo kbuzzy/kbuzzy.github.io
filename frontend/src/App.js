@@ -13,6 +13,7 @@ const DATE_FMT = "MM/DD/YYYY";
 const MAX_VACATION_WEEKS = 4;
 const STORAGE_KEY = "fellowship-scheduler-state-v1";
 const DEFAULT_PCICU_EXCEPTION_MONTHS = ["2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05"];
+const DEFAULT_RETRY_MAX_ATTEMPTS = 8;
 
 const PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"];
 // These labels mirror the backend rotation ids so solved results can be
@@ -1235,14 +1236,17 @@ function TestResultPanel({ result }) {
 function LoadingPanel({ loading, mode }) {
   if (!loading) return null;
 
-  const label = mode === "randomTest"
+  const attemptSuffix = mode.attempt && mode.totalAttempts > 1
+    ? ` (attempt ${mode.attempt} of ${mode.totalAttempts})`
+    : "";
+  const label = mode.kind === "randomTest"
     ? "Running random test"
-    : mode === "typicalTest"
+    : mode.kind === "typicalTest"
       ? "Running typical schedule test"
       : "Generating schedule";
-  const detail = mode === "randomTest"
+  const detail = mode.kind === "randomTest"
     ? "The app is creating a randomized request, solving it, validating the result, and checking the export flow."
-    : mode === "typicalTest"
+    : mode.kind === "typicalTest"
       ? "The app is building a realistic schedule request with October PGY-1 board exams, distinct vacations, and the default PICU exception months."
       : "The solver is assigning monthly rotations and then building the call schedule. This can take a little time.";
 
@@ -1257,7 +1261,7 @@ function LoadingPanel({ loading, mode }) {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontWeight: 700, color: "#0b5ed7" }}>{label}</div>
+        <div style={{ fontWeight: 700, color: "#0b5ed7" }}>{label}{attemptSuffix}</div>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#0b5ed7", letterSpacing: 0.4 }}>IN PROGRESS</div>
       </div>
       <div
@@ -1924,13 +1928,15 @@ export default function App() {
   const [majorHolidays, setMajorHolidays] = useState(storedState?.majorHolidays || []);
   const [validation, setValidation] = useState(storedState?.validation || []);
   const [loading, setLoading] = useState(false);
-  const [loadingMode, setLoadingMode] = useState("generate");
+  const [loadingMode, setLoadingMode] = useState({ kind: "generate", attempt: 1, totalAttempts: 1 });
   const [error, setError] = useState(null);
   const [testResult, setTestResult] = useState(storedState?.testResult || null);
   const [calendarDate, setCalendarDate] = useState(() => moment("07/01/2026", DATE_FMT).toDate());
   const [activeTab, setActiveTab] = useState("scheduler");
   const [backendStatus, setBackendStatus] = useState(storedState?.backendStatus || (API_URL ? "error" : "unconfigured"));
   const [backendChecking, setBackendChecking] = useState(Boolean(API_URL));
+  const [retryUntilValid, setRetryUntilValid] = useState(storedState?.retryUntilValid || false);
+  const [maxRetryAttempts, setMaxRetryAttempts] = useState(storedState?.maxRetryAttempts || DEFAULT_RETRY_MAX_ATTEMPTS);
 
   const months = useMemo(() => listMonths(start, end), [start, end]);
   const apiConfigured = Boolean(API_URL);
@@ -1973,6 +1979,8 @@ export default function App() {
         backendStatus,
         validation,
         testResult,
+        retryUntilValid,
+        maxRetryAttempts,
       }),
     );
   }, [
@@ -1989,6 +1997,8 @@ export default function App() {
     schedule,
     start,
     testResult,
+    retryUntilValid,
+    maxRetryAttempts,
     vacations,
     validation,
   ]);
@@ -2040,8 +2050,95 @@ export default function App() {
     );
   }, [end, holidayWeekends, majorHolidays, pcicuExceptionMonths, roster, rotations, schedule, start]);
 
+  const buildSchedulePayload = useCallback((options) => {
+    const {
+      vacationsById,
+      selectedBoardExamIds,
+      selectedPreferences,
+      selectedExceptionMonths,
+      solverSeed,
+    } = options;
+    const names = roster.map((fellow) => fellow.name.trim());
+    return {
+      fellows: names,
+      start,
+      end,
+      vacations: Object.fromEntries(
+        roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(vacationsById[fellow.id] || [])]),
+      ),
+      holidays: {},
+      pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
+      board_exam_fellows: roster
+        .filter((fellow) => selectedBoardExamIds.includes(fellow.id))
+        .map((fellow) => fellow.name.trim()),
+      holiday_preferences: Object.fromEntries(
+        roster.map((fellow) => [fellow.name.trim(), selectedPreferences[fellow.id]]),
+      ),
+      major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
+      pcicu_exception_months: selectedExceptionMonths,
+      solver_seed: solverSeed,
+    };
+  }, [end, majorHolidayBlocks, roster, start]);
+
+  const requestSchedule = useCallback(async (payload) => {
+    const response = await fetch(`${API_URL}/schedule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    setBackendStatus("connected");
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.detail || `Server error: ${response.status}`);
+    }
+    return response.json();
+  }, []);
+
+  const solveWithRetries = useCallback(async (options) => {
+    const {
+      kind,
+      vacationsById,
+      selectedBoardExamIds,
+      selectedPreferences,
+      selectedExceptionMonths,
+      allowRetryUntilValid,
+    } = options;
+    const totalAttempts = allowRetryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1;
+    let lastAttempt = null;
+
+    for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+      setLoadingMode({ kind, attempt, totalAttempts });
+      const payload = buildSchedulePayload({
+        vacationsById,
+        selectedBoardExamIds,
+        selectedPreferences,
+        selectedExceptionMonths,
+        solverSeed: Math.floor(Math.random() * 1_000_000_000),
+      });
+      const data = await requestSchedule(payload);
+      const nextValidation = buildValidation(
+        data.schedule || [],
+        data.rotations || [],
+        data.holiday_weekends || [],
+        data.major_holidays || [],
+        start,
+        end,
+        selectedExceptionMonths,
+        roster,
+      );
+      const validationPassed = nextValidation.every((check) => check.ok);
+      lastAttempt = { data, nextValidation, validationPassed, attempt, totalAttempts };
+      if (validationPassed || !allowRetryUntilValid) {
+        break;
+      }
+    }
+
+    return lastAttempt;
+  }, [buildSchedulePayload, end, maxRetryAttempts, requestSchedule, roster, start]);
+
   const generateSchedule = useCallback(async () => {
-    setLoadingMode("generate");
+    setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
     setError(null);
     setValidation([]);
@@ -2065,55 +2162,24 @@ export default function App() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/schedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fellows: names,
-          start,
-          end,
-          vacations: Object.fromEntries(
-            roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(vacations[fellow.id] || [])]),
-          ),
-          holidays: {},
-          pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
-          board_exam_fellows: roster
-            .filter((fellow) => boardExamIds.includes(fellow.id))
-            .map((fellow) => fellow.name.trim()),
-          holiday_preferences: Object.fromEntries(
-            roster.map((fellow) => [
-              fellow.name.trim(),
-              holidayPreferences[fellow.id],
-            ]),
-          ),
-          major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
-          pcicu_exception_months: pcicuExceptionMonths,
-        }),
+      const result = await solveWithRetries({
+        kind: "generate",
+        vacationsById: vacations,
+        selectedBoardExamIds: boardExamIds,
+        selectedPreferences: holidayPreferences,
+        selectedExceptionMonths: pcicuExceptionMonths,
+        allowRetryUntilValid: retryUntilValid,
       });
-      setBackendStatus("connected");
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || `Server error: ${response.status}`);
-      }
-      const data = await response.json();
+      const data = result.data;
       setSchedule(data.schedule || []);
       setRotations(data.rotations || []);
       setHolidayWeekends(data.holiday_weekends || []);
       setMajorHolidays(data.major_holidays || []);
       setCalendarDate(moment(start, DATE_FMT).toDate());
-      setValidation(
-        buildValidation(
-          data.schedule || [],
-          data.rotations || [],
-          data.holiday_weekends || [],
-          data.major_holidays || [],
-          start,
-          end,
-          pcicuExceptionMonths,
-          roster,
-        ),
-      );
+      setValidation(result.nextValidation);
+      if (retryUntilValid && !result.validationPassed) {
+        setError(`No fully valid schedule was found after ${result.totalAttempts} attempt${result.totalAttempts === 1 ? "" : "s"}. The closest attempt is shown so you can review the remaining conflicts.`);
+      }
     } catch (err) {
       if (err instanceof TypeError) {
         setBackendStatus("error");
@@ -2122,12 +2188,12 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [boardExamIds, holidayPreferences, majorHolidayBlocks, pcicuExceptionMonths, roster, start, end, vacations]);
+  }, [boardExamIds, holidayPreferences, maxRetryAttempts, pcicuExceptionMonths, retryUntilValid, roster, start, vacations, solveWithRetries]);
 
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
 
-    setLoadingMode("randomTest");
+    setLoadingMode({ kind: "randomTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
     setError(null);
     setTestResult(null);
@@ -2147,49 +2213,17 @@ export default function App() {
     setPcicuExceptionMonths(randomExceptionMonths);
     setHolidayPreferences(randomPreferences);
 
-    const names = roster.map((fellow) => fellow.name.trim());
-
     try {
-      const response = await fetch(`${API_URL}/schedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fellows: names,
-          start,
-          end,
-          vacations: Object.fromEntries(
-            roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(randomVacations[fellow.id] || [])]),
-          ),
-          holidays: {},
-          pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
-          board_exam_fellows: roster
-            .filter((fellow) => randomBoardExamIds.includes(fellow.id))
-            .map((fellow) => fellow.name.trim()),
-          holiday_preferences: Object.fromEntries(
-            roster.map((fellow) => [fellow.name.trim(), randomPreferences[fellow.id]]),
-          ),
-          major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
-          pcicu_exception_months: randomExceptionMonths,
-        }),
+      const result = await solveWithRetries({
+        kind: "randomTest",
+        vacationsById: randomVacations,
+        selectedBoardExamIds: randomBoardExamIds,
+        selectedPreferences: randomPreferences,
+        selectedExceptionMonths: randomExceptionMonths,
+        allowRetryUntilValid: retryUntilValid,
       });
-      setBackendStatus("connected");
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || `Server error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const nextValidation = buildValidation(
-        data.schedule || [],
-        data.rotations || [],
-        data.holiday_weekends || [],
-        data.major_holidays || [],
-        start,
-        end,
-        randomExceptionMonths,
-        roster,
-      );
+      const data = result.data;
+      const nextValidation = result.nextValidation;
       const workbook = exportCalendarWorkbook(
         data.schedule || [],
         start,
@@ -2205,7 +2239,7 @@ export default function App() {
       const hasValidation = nextValidation.length > 0;
       const hasEvents = (data.schedule || []).length > 0;
       const exportWorked = typeof workbook === "string" && workbook.includes('Worksheet ss:Name="Assignments"');
-      const validationPassed = nextValidation.every((check) => check.ok);
+      const validationPassed = result.validationPassed;
 
       setBackendStatus("connected");
       setSchedule(data.schedule || []);
@@ -2222,8 +2256,11 @@ export default function App() {
         title: "Run Random Test",
         message: ok
           ? "Random scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked."
-          : "Random scheduling request completed, but one or more smoke-test checks failed.",
+          : retryUntilValid
+            ? `Random scheduling request completed after ${result.totalAttempts} attempt${result.totalAttempts === 1 ? "" : "s"}, but one or more smoke-test checks still failed.`
+            : "Random scheduling request completed, but one or more smoke-test checks failed.",
         details: [
+          `Attempts used: ${result.attempt}/${result.totalAttempts}`,
           `Schedule days returned: ${(data.schedule || []).length}`,
           `Rotation assignments returned: ${(data.rotations || []).length}`,
           `Validation checks: ${nextValidation.length}`,
@@ -2245,12 +2282,12 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [apiConfigured, months, roster, start, end, majorHolidayBlocks]);
+  }, [apiConfigured, end, maxRetryAttempts, months, retryUntilValid, roster, start, majorHolidayBlocks, solveWithRetries]);
 
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
 
-    setLoadingMode("typicalTest");
+    setLoadingMode({ kind: "typicalTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
     setError(null);
     setTestResult(null);
@@ -2265,49 +2302,17 @@ export default function App() {
     setPcicuExceptionMonths(typicalExceptionMonths);
     setHolidayPreferences(typicalPreferences);
 
-    const names = roster.map((fellow) => fellow.name.trim());
-
     try {
-      const response = await fetch(`${API_URL}/schedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fellows: names,
-          start,
-          end,
-          vacations: Object.fromEntries(
-            roster.map((fellow) => [fellow.name.trim(), expandWeekRanges(typicalVacations[fellow.id] || [])]),
-          ),
-          holidays: {},
-          pgy_years: Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow.pgy])),
-          board_exam_fellows: roster
-            .filter((fellow) => typicalBoardExamIds.includes(fellow.id))
-            .map((fellow) => fellow.name.trim()),
-          holiday_preferences: Object.fromEntries(
-            roster.map((fellow) => [fellow.name.trim(), typicalPreferences[fellow.id]]),
-          ),
-          major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
-          pcicu_exception_months: typicalExceptionMonths,
-        }),
+      const result = await solveWithRetries({
+        kind: "typicalTest",
+        vacationsById: typicalVacations,
+        selectedBoardExamIds: typicalBoardExamIds,
+        selectedPreferences: typicalPreferences,
+        selectedExceptionMonths: typicalExceptionMonths,
+        allowRetryUntilValid: retryUntilValid,
       });
-      setBackendStatus("connected");
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || `Server error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const nextValidation = buildValidation(
-        data.schedule || [],
-        data.rotations || [],
-        data.holiday_weekends || [],
-        data.major_holidays || [],
-        start,
-        end,
-        typicalExceptionMonths,
-        roster,
-      );
+      const data = result.data;
+      const nextValidation = result.nextValidation;
       const workbook = exportCalendarWorkbook(
         data.schedule || [],
         start,
@@ -2323,7 +2328,7 @@ export default function App() {
       const hasValidation = nextValidation.length > 0;
       const hasEvents = (data.schedule || []).length > 0;
       const exportWorked = typeof workbook === "string" && workbook.includes('Worksheet ss:Name="Assignments"');
-      const validationPassed = nextValidation.every((check) => check.ok);
+      const validationPassed = result.validationPassed;
 
       setSchedule(data.schedule || []);
       setRotations(data.rotations || []);
@@ -2339,8 +2344,11 @@ export default function App() {
         title: "Run Typical Schedule Test",
         message: ok
           ? "Typical scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked."
-          : "Typical scheduling request completed, but one or more test checks failed.",
+          : retryUntilValid
+            ? `Typical scheduling request completed after ${result.totalAttempts} attempt${result.totalAttempts === 1 ? "" : "s"}, but one or more test checks still failed.`
+            : "Typical scheduling request completed, but one or more test checks failed.",
         details: [
+          `Attempts used: ${result.attempt}/${result.totalAttempts}`,
           "Board exams: both PGY-1 fellows only",
           "Vacation weeks: all fellows assigned distinct non-holiday weeks",
           `PICU exception months: ${typicalExceptionMonths.join(", ")}`,
@@ -2365,7 +2373,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [apiConfigured, roster, start, end, majorHolidayBlocks]);
+  }, [apiConfigured, maxRetryAttempts, retryUntilValid, roster, start, end, majorHolidayBlocks, solveWithRetries]);
 
   const events = schedule.map((item) => {
     const date = moment(item.date, DATE_FMT);
@@ -2463,6 +2471,33 @@ export default function App() {
                 Backend API not configured for this deployment. On GitHub Pages, set `REACT_APP_API_URL` in the Pages workflow to a hosted backend before generating schedules.
               </div>
             )}
+
+            <div style={{ marginBottom: 16, background: "#fff", border: "1px solid #e0e0e0", borderRadius: 6, padding: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: retryUntilValid ? 10 : 0 }}>
+                <input
+                  type="checkbox"
+                  checked={retryUntilValid}
+                  onChange={(e) => setRetryUntilValid(e.target.checked)}
+                />
+                <span style={{ fontWeight: 600 }}>Keep retrying until a valid schedule is found</span>
+              </label>
+              <div style={{ fontSize: 12, color: "#666" }}>
+                When enabled, the app will retry the same request with different solver seeds until validation passes or the attempt limit is reached.
+              </div>
+              {retryUntilValid && (
+                <div style={{ marginTop: 10 }}>
+                  <label style={labelStyle}>Maximum attempts</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="25"
+                    value={maxRetryAttempts}
+                    onChange={(e) => setMaxRetryAttempts(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
+                    style={{ ...inputStyle, width: 100 }}
+                  />
+                </div>
+              )}
+            </div>
 
             <div
               style={{

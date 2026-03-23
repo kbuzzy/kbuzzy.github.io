@@ -47,6 +47,7 @@ class ScheduleRequest(BaseModel):
     holiday_preferences: dict[str, dict[str, list[str]]]
     major_holiday_blocks: Optional[dict[str, list[dict[str, str]]]] = None
     pcicu_exception_months: list[str]
+    solver_seed: Optional[int] = None
 
     @field_validator("fellows")
     @classmethod
@@ -163,6 +164,7 @@ def create_schedule(req: ScheduleRequest) -> dict:
             req.holiday_preferences,
             req.major_holiday_blocks,
             req.pcicu_exception_months,
+            req.solver_seed,
         )
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
