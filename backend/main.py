@@ -148,6 +148,13 @@ def create_schedule(req: ScheduleRequest) -> dict:
             detail=f"missing holiday preferences for: {', '.join(missing_preferences)}",
         )
 
+    unknown_call_avoid_fellows = [name for name in req.call_avoid_requests if name not in req.fellows]
+    if unknown_call_avoid_fellows:
+        raise HTTPException(
+            status_code=400,
+            detail=f"call_avoid_requests provided for unknown fellows: {', '.join(unknown_call_avoid_fellows)}",
+        )
+
     if len(set(req.pcicu_exception_months)) != len(req.pcicu_exception_months):
         raise HTTPException(
             status_code=400,

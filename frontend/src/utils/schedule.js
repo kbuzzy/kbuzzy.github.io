@@ -462,11 +462,11 @@ export function createTestCallAvoidRequests(roster, start, end, majorHolidayBloc
     const weekendCandidates = shuffle(allWeekendCandidates);
     const selected = [];
 
-    if (weekendCandidates.length > 0) {
-      selected.push(weekendCandidates.shift());
-    }
-    if (requestCount > 1 && weekdayCandidates.length > 0) {
+    if (weekdayCandidates.length > 0) {
       selected.push(weekdayCandidates.shift());
+    }
+    if (weekendCandidates.length > 0 && selected.length < requestCount) {
+      selected.push(weekendCandidates.shift());
     }
 
     const combinedCandidates = shuffle([
@@ -482,6 +482,16 @@ export function createTestCallAvoidRequests(roster, start, end, majorHolidayBloc
 
     requests[fellow.id] = selected.map((request) => ({ from: request.from, to: request.to }));
   });
+
+  const hasWeekendRequest = Object.values(requests).some((ranges) => ranges.some((range) => range.from !== range.to));
+  if (!hasWeekendRequest && roster.length > 0 && allWeekendCandidates.length > 0) {
+    const fallbackWeekend = allWeekendCandidates[0];
+    const firstFellowId = roster[0].id;
+    const existing = requests[firstFellowId] || [];
+    requests[firstFellowId] = existing.length >= 5
+      ? [{ from: fallbackWeekend.from, to: fallbackWeekend.to }, ...existing.slice(1)]
+      : [...existing, { from: fallbackWeekend.from, to: fallbackWeekend.to }];
+  }
 
   return requests;
 }

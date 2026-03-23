@@ -79,7 +79,7 @@ describe("createTestCallAvoidRequests", () => {
   test("creates between one and five requests for each fellow, with mixed weekday and weekend coverage", () => {
     const majorHolidayBlocks = createDefaultMajorHolidayBlocks();
     const randomSpy = jest.spyOn(Math, "random")
-      .mockReturnValueOnce(0.6)
+      .mockReturnValueOnce(0)
       .mockReturnValue(0.1);
 
     try {

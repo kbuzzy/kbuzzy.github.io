@@ -96,6 +96,7 @@ export function useScheduler() {
   const [retryUntilValid, setRetryUntilValid] = useState(storedState?.retryUntilValid || false);
   const [maxRetryAttempts, setMaxRetryAttempts] = useState(storedState?.maxRetryAttempts || DEFAULT_RETRY_MAX_ATTEMPTS);
   const activeRequestControllerRef = useRef(null);
+  const activeRunIdRef = useRef(0);
 
   const months = useMemo(() => listMonths(start, end), [start, end]);
   const apiConfigured = Boolean(API_URL);
@@ -301,6 +302,7 @@ export function useScheduler() {
   }, [start]);
 
   const cancelInProgress = useCallback(() => {
+    activeRunIdRef.current += 1;
     activeRequestControllerRef.current?.abort();
     activeRequestControllerRef.current = null;
     setLoading(false);
@@ -309,6 +311,8 @@ export function useScheduler() {
   }, []);
 
   const generateSchedule = useCallback(async () => {
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
     setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
@@ -343,6 +347,9 @@ export function useScheduler() {
         selectedExceptionMonths: pcicuExceptionMonths,
         allowRetryUntilValid: retryUntilValid,
       });
+      if (activeRunIdRef.current !== runId) {
+        return;
+      }
       applySolvedResult(result.data, result.nextValidation);
       if (retryUntilValid && !result.validationPassed) {
         setError(`No fully valid schedule was found after ${result.totalAttempts} attempt${result.totalAttempts === 1 ? "" : "s"}. The closest attempt is shown so you can review the remaining conflicts.`);
@@ -356,8 +363,10 @@ export function useScheduler() {
       }
       setError(err.message || "Unknown error");
     } finally {
-      activeRequestControllerRef.current = null;
-      setLoading(false);
+      if (activeRunIdRef.current === runId) {
+        activeRequestControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [
     applySolvedResult,
@@ -372,7 +381,7 @@ export function useScheduler() {
     solveWithRetries,
   ]);
 
-  const finalizeTestResult = useCallback(async (title, data, nextValidation, result, exceptionMonthsForRun, vacationsForRun, successMessage, failureMessage) => {
+  const finalizeTestResult = useCallback(async (title, data, nextValidation, result, exceptionMonthsForRun, vacationsForRun, successMessage, failureMessage, runId) => {
     const workbook = await exportCalendarWorkbook(
       data.schedule || [],
       start,
@@ -389,6 +398,10 @@ export function useScheduler() {
     const hasEvents = (data.schedule || []).length > 0;
     const exportWorked = Array.isArray(workbook?.worksheets) && workbook.worksheets.some((sheet) => sheet.name === "Assignments");
     const validationPassed = result.validationPassed;
+
+    if (activeRunIdRef.current !== runId) {
+      throw new DOMException("Scheduling request canceled.", "AbortError");
+    }
 
     applySolvedResult(data, nextValidation);
     setActiveTab("calendar");
@@ -416,6 +429,8 @@ export function useScheduler() {
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
 
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
     setLoadingMode({ kind: "randomTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
@@ -454,6 +469,7 @@ export function useScheduler() {
         randomVacations,
         "Random scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked.",
         "Random scheduling request completed",
+        runId,
       ));
     } catch (err) {
       if (err?.name === "AbortError") {
@@ -476,14 +492,18 @@ export function useScheduler() {
         details: [err.message || "Unknown error"],
       });
     } finally {
-      activeRequestControllerRef.current = null;
-      setLoading(false);
+      if (activeRunIdRef.current === runId) {
+        activeRequestControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [apiConfigured, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, retryUntilValid, roster, solveWithRetries, start]);
 
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
 
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
     setLoadingMode({ kind: "typicalTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
@@ -521,6 +541,7 @@ export function useScheduler() {
         typicalVacations,
         "Typical scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked.",
         "Typical scheduling request completed",
+        runId,
       );
       nextResult.details.splice(
         1,
@@ -552,8 +573,10 @@ export function useScheduler() {
         details: [err.message || "Unknown error"],
       });
     } finally {
-      activeRequestControllerRef.current = null;
-      setLoading(false);
+      if (activeRunIdRef.current === runId) {
+        activeRequestControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [apiConfigured, end, finalizeTestResult, majorHolidayBlocks, retryUntilValid, roster, solveWithRetries, start, maxRetryAttempts]);
 
