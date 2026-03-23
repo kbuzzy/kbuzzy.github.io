@@ -181,7 +181,7 @@ export function ValidationPanel({ checks }) {
           borderBottom: "1px solid #dee2e6",
         }}
       >
-        Schedule validation
+        Schedule validation summary
       </div>
       <div style={{ background: "#fff" }}>
         {checks.map((check) => (
@@ -196,7 +196,7 @@ export function ValidationPanel({ checks }) {
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
               <span style={{ fontWeight: 700, color: check.ok ? "#155724" : "#c0392b" }}>
-                {check.ok ? "Pass" : "Failed"}
+                {check.ok ? "Passing" : "Needs attention"}
               </span>
               <span style={{ fontWeight: 600 }}>{check.label}</span>
             </div>
@@ -219,21 +219,21 @@ export function RulesValidationTab({ checks, error }) {
       title: "Roster Rules",
       items: [
         "The schedule assumes 6 fellows: 2 first-year fellows (PGY-4), 2 second-year fellows (PGY-5), and 2 third-year fellows (PGY-6).",
-        "Fellow names must be unique and can be edited for future academic years.",
+        "Fellow names can be edited, but each name must stay unique.",
       ],
     },
     {
       title: "Clinical Rotations",
       items: [
         "Each fellow is assigned exactly one monthly daytime rotation.",
-        "Supported rotations are consult, imaging, research, cath, ACHD/EP, and PCICU.",
+        "The supported rotations are consult, imaging, research, cath, ACHD/EP, and PCICU.",
         "Consult, cath, PCICU, and ACHD/EP are single-slot monthly rotations.",
         "Imaging and research may have multiple fellows in the same month.",
         "Both first-year fellows (PGY-4) must be on imaging in July 2026.",
         "No fellow may repeat the same non-research rotation in back-to-back months.",
-        "Research may repeat in consecutive months when needed, but no fellow may have more than two research months in a row.",
-        "Long runs of the harder rotations consult, cath, and PCICU are discouraged; more than two of those in a row is treated as a soft penalty.",
-        "October board-exam takers are preferentially placed on imaging or research when feasible.",
+        "Research may repeat when needed, but no fellow may have more than two research months in a row.",
+        "Long runs of consult, cath, and PCICU are discouraged; stretches longer than two months are treated as a soft penalty.",
+        "October board-exam takers are steered toward imaging or research when feasible.",
       ],
     },
     {
@@ -241,30 +241,30 @@ export function RulesValidationTab({ checks, error }) {
       items: [
         "Monday call always goes to the monthly consult fellow.",
         "Tuesday call usually goes to the monthly PCICU fellow.",
-        "In 6 selected exception months, PICU covers Tuesday nights so Tuesday call goes to the consult fellow instead.",
-        "The consult fellow cannot take other call days outside the required Monday and eligible Tuesday assignments.",
-        "The monthly PCICU fellow cannot take any weekend or holiday-weekend block during that same calendar month.",
-        "No fellow can work in-house call on two consecutive days.",
-        "A fellow may stay on consecutive days within a major holiday block or holiday weekend block.",
-        "No fellow can be on call the day immediately before a holiday call block starts.",
+        "In 6 selected exception months, PICU covers Tuesday nights, so Tuesday call goes to the consult fellow instead.",
+        "The consult fellow cannot take other call days beyond the required Monday and eligible Tuesday assignments.",
+        "The monthly PCICU fellow cannot take any weekend or holiday-weekend block in that same month.",
+        "No fellow can work consecutive call days outside an allowed multi-day block.",
+        "Consecutive days are allowed within the same weekend block, holiday weekend, or major holiday half.",
+        "A fellow cannot take the day immediately before a holiday call block starts.",
         "The cath fellow is softly preferred for Thursday call when feasible.",
-        "A fellow on a non-holiday Thursday call cannot also take the following weekend block, whether that next weekend is a normal weekend or a holiday weekend.",
+        "A fellow on a non-holiday Thursday call cannot also take the following weekend block, whether it is a standard weekend or a holiday weekend.",
         "No fellow can be assigned to two weekend blocks in a row.",
       ],
     },
     {
       title: "Weekends And Holidays",
       items: [
-        "Standard weekends are Friday through Sunday blocks assigned to one fellow.",
-        "Holiday weekends are treated as special blocks and each fellow gets exactly one per year.",
+        "Standard weekends are Friday-Sunday blocks assigned to one fellow.",
+        "Holiday weekends are special blocks, and each fellow receives exactly one per year.",
         "Each major holiday is split into two halves, with one fellow assigned to each half.",
         "Thanksgiving halves default to 11/25-11/26 and 11/27-11/29.",
         "Christmas halves default to 12/22-12/24 and 12/25-12/27.",
         "New Year's halves default to 12/28-12/30 and 12/31-01/03.",
         "Those major holiday date ranges can be edited in the Scheduler tab.",
         "Each fellow is assigned exactly one half of one major holiday per year.",
-        "If the holiday falls on Friday, the block expands to Thursday through Sunday.",
-        "If the holiday falls on Saturday, Sunday, or Monday, the block expands to Friday through Monday.",
+        "If the holiday falls on Friday, the block expands to Thursday-Sunday.",
+        "If the holiday falls on Saturday, Sunday, or Monday, the block expands to Friday-Monday.",
         "The six tracked holiday weekends are July 4, Labor Day, MLK Day, Good Friday, Memorial Day, and Juneteenth.",
       ],
     },
@@ -279,25 +279,25 @@ export function RulesValidationTab({ checks, error }) {
     {
       title: "Current Validation Checks",
       items: [
-        "Daily coverage across the full academic year",
-        "Exactly one monthly rotation per fellow",
-        "Monthly consult/cath/PCICU/ACHD-EP slot counts",
-        "PGY-based annual rotation quota checks",
-        "Both first-year fellows (PGY-4) on imaging in July 2026",
-        "No repeated non-research rotations in back-to-back months",
-        "No fellow has more than two consecutive research months",
-        "Major holiday half-block integrity and one-half-per-fellow coverage",
-        "Monday consult assignments",
-        "Tuesday PCICU/consult exception-month rule using the selected 6 PICU-covered months",
-        "Weekend and holiday block integrity",
-        "No back-to-back in-house call days",
-        "No day-before-holiday-call conflicts",
-        "No consecutive weekend assignments for any fellow",
-        "Consult-fellow exclusion from weekend call",
-        "PCICU-fellow exclusion from weekend call",
-        "Thursday-to-following-weekend conflict check",
-        "Cath-fellow Thursday match count",
-        "Holiday weekend distribution summary",
+        "Every day in the academic year is covered.",
+        "Each fellow has exactly one rotation every month.",
+        "Monthly consult, cath, PCICU, and ACHD/EP slot counts are correct.",
+        "Annual rotation totals match the fellow's PGY year.",
+        "Both first-year fellows (PGY-4) are on imaging in July 2026.",
+        "Non-research rotations do not repeat in back-to-back months.",
+        "No fellow has more than two consecutive research months.",
+        "Major holiday halves stay intact and are distributed correctly.",
+        "Mondays go to the consult fellow.",
+        "Tuesdays follow the PCICU versus consult exception-month rule.",
+        "Weekend and holiday blocks stay intact.",
+        "No one works consecutive call days outside allowed block exceptions.",
+        "No one works the day immediately before a holiday block.",
+        "No fellow is assigned back-to-back weekends.",
+        "Consult fellows are excluded from weekend call in their consult month.",
+        "PCICU fellows are excluded from weekend call in their PCICU month.",
+        "Thursday-to-following-weekend conflicts are blocked.",
+        "Thursday cath coverage is tracked.",
+        "Holiday weekend coverage is summarized and checked.",
       ],
     },
     {
@@ -306,7 +306,7 @@ export function RulesValidationTab({ checks, error }) {
         "Each fellow ranks Thanksgiving, Christmas, and New Year's from most preferred to work to least preferred to work.",
         "Each fellow also ranks the six holiday weekends from most preferred to work to least preferred to work.",
         "The solver uses those rankings as a soft preference objective.",
-        "Preference approval is seniority-weighted, with third-year fellows (PGY-6) favored over second-year fellows (PGY-5) and second-year fellows favored over first-year fellows (PGY-4).",
+        "Preference satisfaction is weighted by seniority: PGY-6 over PGY-5 over PGY-4.",
       ],
     },
   ];
