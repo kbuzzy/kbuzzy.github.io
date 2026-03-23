@@ -7,7 +7,7 @@ from typing import Optional
 from solver import generate_schedule
 
 DATE_FMT = "%m/%d/%Y"
-VALID_PGY = {"PGY-1", "PGY-2", "PGY-3"}
+VALID_PGY = {"PGY-4", "PGY-5", "PGY-6"}
 DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://kbuzzy.github.io",
@@ -74,7 +74,7 @@ class ScheduleRequest(BaseModel):
     def valid_pgy_years(cls, v: dict[str, str]) -> dict[str, str]:
         bad = [name for name, pgy in v.items() if pgy not in VALID_PGY]
         if bad:
-            raise ValueError("PGY values must be one of: PGY-1, PGY-2, PGY-3")
+            raise ValueError("PGY values must be one of: PGY-4, PGY-5, PGY-6")
         return v
 
 

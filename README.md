@@ -9,9 +9,9 @@ Fellowship Scheduler is a React + FastAPI application that now solves two linked
 
 The current model assumes a single academic year from `07/01/2026` through `06/30/2027` and a fixed roster of 6 fellows:
 
-- 2 `PGY-1` fellows
-- 2 `PGY-2` fellows
-- 2 `PGY-3` fellows
+- 2 first-year fellows (`PGY-4`)
+- 2 second-year fellows (`PGY-5`)
+- 2 third-year fellows (`PGY-6`)
 
 The frontend keeps that 2-2-2 PGY structure fixed, but you can edit each fellow's name directly.
 
@@ -30,9 +30,11 @@ Supported rotation types:
 
 Each monthly rotation lasts for the entire calendar month.
 
+`PGY-4`, `PGY-5`, and `PGY-6` here refer to first-, second-, and third-year fellowship, respectively.
+
 ## Rotation Quotas by PGY
 
-### PGY-1
+### First-Year Fellowship (`PGY-4`)
 
 - 3 months of consult
 - 1 month of PCICU
@@ -41,7 +43,7 @@ Each monthly rotation lasts for the entire calendar month.
 - 1 month of research
 - 0 months of ACHD/EP
 
-### PGY-2
+### Second-Year Fellowship (`PGY-5`)
 
 - 2 months of consult
 - 1 month of PCICU
@@ -50,7 +52,7 @@ Each monthly rotation lasts for the entire calendar month.
 - 1 month of ACHD/EP
 - 4 months of research
 
-### PGY-3
+### Third-Year Fellowship (`PGY-6`)
 
 - 1 month of consult
 - 1 month of cath
@@ -71,7 +73,7 @@ Each monthly rotation lasts for the entire calendar month.
 - Fellows can optionally be flagged as taking board certification exams in October.
 - For October board exam takers, the solver prefers `imaging` or `research` in `October 2026` when feasible.
 - Each fellow can rank major holidays and holiday weekends from most preferred to work to least preferred to work.
-- Holiday preference approval is a soft objective that is weighted by seniority: `PGY-3` over `PGY-2` over `PGY-1`.
+- Holiday preference approval is a soft objective that is weighted by seniority: third-year fellowship (`PGY-6`) over second-year fellowship (`PGY-5`) over first-year fellowship (`PGY-4`).
 
 ## Call Rules
 
@@ -122,9 +124,9 @@ For the `2026-2027` academic year, the default PICU-covered Tuesday exception mo
 
 Weekend totals are enforced exactly by PGY:
 
-- `PGY-1`: 12 weekend blocks each
-- `PGY-2`: 9 weekend blocks each
-- `PGY-3`: 5 weekend blocks each
+- first-year fellowship (`PGY-4`): 12 weekend blocks each
+- second-year fellowship (`PGY-5`): 9 weekend blocks each
+- third-year fellowship (`PGY-6`): 5 weekend blocks each
 
 With two fellows in each class, those targets sum to 52 weekend blocks, which matches the academic year.
 
@@ -172,12 +174,12 @@ Example request:
   },
   "holidays": {},
   "pgy_years": {
-    "Alice Smith": "PGY-1",
-    "Brooke Jones": "PGY-1",
-    "Carla Lee": "PGY-2",
-    "Dana Patel": "PGY-2",
-    "Evan Kim": "PGY-3",
-    "Frank Wu": "PGY-3"
+    "Alice Smith": "PGY-4",
+    "Brooke Jones": "PGY-4",
+    "Carla Lee": "PGY-5",
+    "Dana Patel": "PGY-5",
+    "Evan Kim": "PGY-6",
+    "Frank Wu": "PGY-6"
   },
   "board_exam_fellows": ["Alice Smith"],
   "holiday_preferences": {

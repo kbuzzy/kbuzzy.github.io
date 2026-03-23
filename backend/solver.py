@@ -13,7 +13,7 @@ DIFFICULT_ROTATION_STREAK_WEIGHT = 3
 IN_HOUSE_RANGE_WEIGHT = 60
 IN_HOUSE_PAIRWISE_WEIGHT = 8
 TOTAL_CALL_RANGE_WEIGHT = 5
-PGY_PREFERENCE_WEIGHTS = {"PGY-1": 1, "PGY-2": 2, "PGY-3": 3}
+PGY_PREFERENCE_WEIGHTS = {"PGY-4": 1, "PGY-5": 2, "PGY-6": 3}
 
 # The solver is intentionally scoped to one academic year so the quota
 # checks, holiday windows, and monthly rotation counts stay deterministic.
@@ -25,13 +25,13 @@ DEFAULT_EXCEPTION_TUESDAY_MONTHS = {
     "2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05",
 }
 ROTATIONS = ["consult", "imaging", "research", "cath", "achd_ep", "pcicu"]
-PGY_WEEKEND_TARGETS = {"PGY-1": 12, "PGY-2": 9, "PGY-3": 5}
+PGY_WEEKEND_TARGETS = {"PGY-4": 12, "PGY-5": 9, "PGY-6": 5}
 PGY_ROTATION_TARGETS = {
-    "PGY-1": {"consult": 3, "pcicu": 1, "cath": 4, "imaging": 3, "research": 1, "achd_ep": 0},
-    "PGY-2": {"consult": 2, "pcicu": 1, "cath": 1, "imaging": 3, "research": 4, "achd_ep": 1},
-    "PGY-3": {"consult": 1, "pcicu": 1, "cath": 1, "imaging": 1, "research": 7, "achd_ep": 1},
+    "PGY-4": {"consult": 3, "pcicu": 1, "cath": 4, "imaging": 3, "research": 1, "achd_ep": 0},
+    "PGY-5": {"consult": 2, "pcicu": 1, "cath": 1, "imaging": 3, "research": 4, "achd_ep": 1},
+    "PGY-6": {"consult": 1, "pcicu": 1, "cath": 1, "imaging": 1, "research": 7, "achd_ep": 1},
 }
-REQUIRED_PGY_COUNTS = {"PGY-1": 2, "PGY-2": 2, "PGY-3": 2}
+REQUIRED_PGY_COUNTS = {"PGY-4": 2, "PGY-5": 2, "PGY-6": 2}
 HOLIDAY_WEEKENDS = {
     "2026-07-03": {
         "label": "July 4",
@@ -170,11 +170,11 @@ def generate_schedule(
     for fellow in fellows:
         pgy = pgy_years.get(fellow)
         if pgy not in PGY_ROTATION_TARGETS:
-            raise ValueError("each fellow must have a valid PGY value of PGY-1, PGY-2, or PGY-3")
+            raise ValueError("each fellow must have a valid PGY value of PGY-4, PGY-5, or PGY-6")
         pgy_counts[pgy] += 1
     for pgy, required in REQUIRED_PGY_COUNTS.items():
         if pgy_counts[pgy] != required:
-            raise ValueError("the roster must include exactly two fellows in each of PGY-1, PGY-2, and PGY-3")
+            raise ValueError("the roster must include exactly two fellows in each of PGY-4, PGY-5, and PGY-6")
 
     major_holidays = _normalize_major_holidays(major_holiday_blocks)
     expected_major = set(major_holidays)
@@ -237,7 +237,7 @@ def generate_schedule(
 
     july_index = month_index["2026-07"]
     for f, fellow in enumerate(fellows):
-        if pgy_years[fellow] == "PGY-1":
+        if pgy_years[fellow] == "PGY-4":
             model.add(rotation[(f, july_index, rotation_index["imaging"])] == 1)
 
     for f in range(n):

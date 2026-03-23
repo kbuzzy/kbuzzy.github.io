@@ -27,9 +27,9 @@ const ROTATION_LABELS = {
   pcicu: "PCICU",
 };
 const PGY_ROTATION_TARGETS = {
-  "PGY-1": { consult: 3, pcicu: 1, cath: 4, imaging: 3, research: 1, achd_ep: 0 },
-  "PGY-2": { consult: 2, pcicu: 1, cath: 1, imaging: 3, research: 4, achd_ep: 1 },
-  "PGY-3": { consult: 1, pcicu: 1, cath: 1, imaging: 1, research: 7, achd_ep: 1 },
+  "PGY-4": { consult: 3, pcicu: 1, cath: 4, imaging: 3, research: 1, achd_ep: 0 },
+  "PGY-5": { consult: 2, pcicu: 1, cath: 1, imaging: 3, research: 4, achd_ep: 1 },
+  "PGY-6": { consult: 1, pcicu: 1, cath: 1, imaging: 1, research: 7, achd_ep: 1 },
 };
 const HOLIDAY_WEEKENDS = [
   { label: "July 4", start: "07/03/2026", end: "07/06/2026" },
@@ -59,12 +59,12 @@ const DEFAULT_MAJOR_HOLIDAY_BLOCKS = {
 const HOLIDAY_WEEKEND_OPTIONS = HOLIDAY_WEEKENDS.map((item) => item.label);
 
 const INITIAL_ROSTER = [
-  { id: "f1", pgy: "PGY-1", name: "Deepthi" },
-  { id: "f2", pgy: "PGY-1", name: "Amitie" },
-  { id: "f3", pgy: "PGY-2", name: "Rijutha" },
-  { id: "f4", pgy: "PGY-2", name: "Jeffery" },
-  { id: "f5", pgy: "PGY-3", name: "Jordan" },
-  { id: "f6", pgy: "PGY-3", name: "Kilian" },
+  { id: "f1", pgy: "PGY-4", name: "Deepthi" },
+  { id: "f2", pgy: "PGY-4", name: "Amitie" },
+  { id: "f3", pgy: "PGY-5", name: "Rijutha" },
+  { id: "f4", pgy: "PGY-5", name: "Jeffery" },
+  { id: "f5", pgy: "PGY-6", name: "Jordan" },
+  { id: "f6", pgy: "PGY-6", name: "Kilian" },
 ];
 
 function fellowColor(index) {
@@ -1258,7 +1258,7 @@ function LoadingPanel({ loading, mode }) {
   const detail = mode.kind === "randomTest"
     ? "The app is creating a randomized request, solving it, validating the result, and checking the export flow."
     : mode.kind === "typicalTest"
-      ? "The app is building a realistic schedule request with October PGY-1 board exams, distinct vacations, and the default PICU exception months."
+      ? "The app is building a realistic schedule request with October first-year fellow board exams, distinct vacations, and the default PICU exception months."
       : "The solver is assigning monthly rotations and then building the call schedule. This can take a little time.";
 
   return (
@@ -1306,7 +1306,7 @@ function RulesValidationTab({ checks, error }) {
     {
       title: "Roster Rules",
       items: [
-        "The schedule assumes 6 fellows: 2 PGY-1, 2 PGY-2, and 2 PGY-3.",
+        "The schedule assumes 6 fellows: 2 first-year fellows (PGY-4), 2 second-year fellows (PGY-5), and 2 third-year fellows (PGY-6).",
         "Fellow names must be unique and can be edited for future academic years.",
       ],
     },
@@ -1317,7 +1317,7 @@ function RulesValidationTab({ checks, error }) {
         "Supported rotations are consult, imaging, research, cath, ACHD/EP, and PCICU.",
         "Consult, cath, PCICU, and ACHD/EP are single-slot monthly rotations.",
         "Imaging and research may have multiple fellows in the same month.",
-        "Both PGY-1 fellows must be on imaging in July 2026.",
+        "Both first-year fellows (PGY-4) must be on imaging in July 2026.",
         "No fellow may repeat the same non-research rotation in back-to-back months.",
         "Research may repeat in consecutive months when needed, but no fellow may have more than two research months in a row.",
         "Long runs of the harder rotations consult, cath, and PCICU are discouraged; more than two of those in a row is treated as a soft penalty.",
@@ -1371,7 +1371,7 @@ function RulesValidationTab({ checks, error }) {
         "Exactly one monthly rotation per fellow",
         "Monthly consult/cath/PCICU/ACHD-EP slot counts",
         "PGY-based annual rotation quota checks",
-        "Both PGY-1 fellows on imaging in July 2026",
+        "Both first-year fellows (PGY-4) on imaging in July 2026",
         "No repeated non-research rotations in back-to-back months",
         "No fellow has more than two consecutive research months",
         "Major holiday half-block integrity and one-half-per-fellow coverage",
@@ -1394,7 +1394,7 @@ function RulesValidationTab({ checks, error }) {
         "Each fellow ranks Thanksgiving, Christmas, and New Year's from most preferred to work to least preferred to work.",
         "Each fellow also ranks the six holiday weekends from most preferred to work to least preferred to work.",
         "The solver uses those rankings as a soft preference objective.",
-        "Preference approval is seniority-weighted, with PGY-3 favored over PGY-2 and PGY-2 favored over PGY-1.",
+        "Preference approval is seniority-weighted, with third-year fellows (PGY-6) favored over second-year fellows (PGY-5) and second-year fellows favored over first-year fellows (PGY-4).",
       ],
     },
   ];
@@ -1541,7 +1541,7 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
       }
       if (month === "2026-07") {
         const fellowRecord = roster?.find((item) => item.name.trim() === fellow);
-        if (fellowRecord?.pgy === "PGY-1" && rotationName !== "imaging") {
+        if (fellowRecord?.pgy === "PGY-4" && rotationName !== "imaging") {
           julyImagingErrors.push(`${fellow} should be on imaging in 2026-07, got ${rotationName || "none"}`);
         }
       }
@@ -1610,9 +1610,9 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
   });
   checks.push({
     ok: julyImagingErrors.length === 0,
-    label: "July PGY-1 imaging",
+    label: "July first-year fellow imaging",
     detail: julyImagingErrors.length === 0
-      ? "Both first-year fellows are on imaging in July 2026."
+      ? "Both first-year fellows (PGY-4) are on imaging in July 2026."
       : julyImagingErrors.slice(0, 3).join(" | "),
   });
   checks.push({
@@ -2311,7 +2311,7 @@ export default function App() {
     setTestResult(null);
 
     const typicalVacations = createTypicalVacations(roster, start, end, majorHolidayBlocks);
-    const typicalBoardExamIds = roster.filter((fellow) => fellow.pgy === "PGY-1").map((fellow) => fellow.id);
+    const typicalBoardExamIds = roster.filter((fellow) => fellow.pgy === "PGY-4").map((fellow) => fellow.id);
     const typicalExceptionMonths = [...DEFAULT_PCICU_EXCEPTION_MONTHS];
     const typicalPreferences = createRandomPreferenceState(roster);
 
@@ -2367,7 +2367,7 @@ export default function App() {
             : "Typical scheduling request completed, but one or more test checks failed.",
         details: [
           `Attempts used: ${result.attempt}/${result.totalAttempts}`,
-          "Board exams: both PGY-1 fellows only",
+          "Board exams: both first-year fellows (PGY-4) only",
           "Vacation weeks: all fellows assigned distinct non-holiday weeks",
           `PICU exception months: ${typicalExceptionMonths.join(", ")}`,
           `Schedule days returned: ${(data.schedule || []).length}`,
