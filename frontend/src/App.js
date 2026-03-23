@@ -30,6 +30,17 @@ import moment from "moment";
 
 const localizer = momentLocalizer(moment);
 
+function currentMainBundlePath() {
+  if (typeof document === "undefined") return "";
+  const script = Array.from(document.scripts).find((item) => item.src && item.src.includes("/static/js/main."));
+  if (!script) return "";
+  try {
+    return new URL(script.src).pathname;
+  } catch {
+    return script.src;
+  }
+}
+
 export default function App() {
   const {
     activeTab,
@@ -92,6 +103,7 @@ export default function App() {
   const holidayWeekendSummary = `${holidayWeekends.length} assigned`;
   const majorHolidaySummary = `${majorHolidays.length} half-blocks`;
   const [showScrollTop, setShowScrollTop] = React.useState(false);
+  const [updateAvailable, setUpdateAvailable] = React.useState(false);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -110,6 +122,41 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    if (window.location.hostname === "localhost") return undefined;
+
+    let cancelled = false;
+    const manifestUrl = `${process.env.PUBLIC_URL || ""}/asset-manifest.json?ts=${Date.now()}`;
+
+    const checkForNewBuild = async () => {
+      try {
+        const response = await fetch(manifestUrl, { cache: "no-store" });
+        if (!response.ok) return;
+        const manifest = await response.json();
+        const latestMain = manifest?.files?.main;
+        const currentMain = currentMainBundlePath();
+        if (!cancelled && latestMain && currentMain && latestMain !== currentMain) {
+          setUpdateAvailable(true);
+        }
+      } catch {
+        // Ignore version-check failures; stale build detection is best-effort.
+      }
+    };
+
+    checkForNewBuild();
+    const intervalId = window.setInterval(checkForNewBuild, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const reloadForLatestBuild = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.location.reload();
+  }, []);
+
   return (
     <div style={{ padding: 24, maxWidth: 1150, margin: "0 auto", fontFamily: "sans-serif" }}>
       <style>{`
@@ -126,6 +173,28 @@ export default function App() {
       <div style={{ marginBottom: 16, fontSize: 13, color: "#5b6470" }}>
         Created by Kilian Burke
       </div>
+      {updateAvailable && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "10px 12px",
+            background: "#fff3cd",
+            border: "1px solid #ffe69c",
+            borderRadius: 6,
+            color: "#856404",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>A newer version of this site is available. Refresh to load the latest UI.</span>
+          <button onClick={reloadForLatestBuild} style={{ ...btnStyle, background: "#856404" }}>
+            Refresh now
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {["scheduler", "calendar", "rules"].map((tab) => (
