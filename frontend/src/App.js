@@ -222,14 +222,6 @@ export default function App() {
                   />
                 </div>
               )}
-              {schedule.length > 0 && (
-                <button
-                  onClick={exportWorkbook}
-                  style={{ ...btnStyle, background: "#2ca02c" }}
-                >
-                  Export calendar workbook
-                </button>
-              )}
             </div>
 
             <div
@@ -331,6 +323,20 @@ export default function App() {
             <BackendStatusBadge status={backendStatus} checking={backendChecking} apiUrl={API_URL} onRetry={checkBackend} />
             <TestResultPanel result={testResult} />
             <ValidationPanel checks={validation} />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: 12,
+              }}
+            >
+              <button
+                onClick={exportWorkbook}
+                style={{ ...btnStyle, background: "#2ca02c" }}
+              >
+                Export calendar workbook
+              </button>
+            </div>
 
             <Calendar
               localizer={localizer}

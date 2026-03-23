@@ -352,7 +352,7 @@ export function useScheduler() {
     );
     const hasValidation = nextValidation.length > 0;
     const hasEvents = (data.schedule || []).length > 0;
-    const exportWorked = typeof workbook === "string" && workbook.includes('Worksheet ss:Name="Assignments"');
+    const exportWorked = Array.isArray(workbook?.SheetNames) && workbook.SheetNames.includes("Assignments");
     const validationPassed = result.validationPassed;
 
     applySolvedResult(data, nextValidation);
