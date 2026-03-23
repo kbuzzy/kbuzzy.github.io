@@ -154,6 +154,45 @@ export function BackendStatusBadge({ status, checking, apiUrl, onRetry }) {
   );
 }
 
+export function CollapsibleSection({ title, summary, defaultOpen = false, children }) {
+  return (
+    <details
+      open={defaultOpen}
+      style={{
+        marginBottom: 16,
+        background: "#fff",
+        border: "1px solid #d8dee6",
+        borderRadius: 8,
+        overflow: "hidden",
+      }}
+    >
+      <summary
+        style={{
+          listStyle: "none",
+          cursor: "pointer",
+          padding: "12px 14px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          background: "#f8fafc",
+          fontWeight: 700,
+        }}
+      >
+        <span>{title}</span>
+        {summary && (
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#5b6470" }}>
+            {summary}
+          </span>
+        )}
+      </summary>
+      <div style={{ padding: 14 }}>
+        {children}
+      </div>
+    </details>
+  );
+}
+
 function PreferenceRankingCard({ title, items, onMove }) {
   return (
     <div

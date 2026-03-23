@@ -2,10 +2,11 @@ import React from "react";
 import { Calendar, momentLocalizer } from "react-big-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
-import { API_URL } from "./config/schedule";
+import { API_URL, MAX_VACATION_WEEKS } from "./config/schedule";
 import {
   BackendStatusBadge,
   BoardExamEditor,
+  CollapsibleSection,
   HolidayPreferenceEditor,
   LoadingPanel,
   MajorHolidayBlockEditor,
@@ -77,6 +78,16 @@ export default function App() {
     vacations,
   } = useScheduler();
 
+  const vacationWeeksFilled = roster.reduce(
+    (total, fellow) => total + (vacations[fellow.id] || []).filter((range) => range.from && range.to).length,
+    0,
+  );
+  const totalVacationSlots = roster.length * MAX_VACATION_WEEKS;
+  const boardExamCount = boardExamIds.length;
+  const exceptionMonthSummary = `${pcicuExceptionMonths.length}/6 selected`;
+  const holidayBlockSummary = `${Object.values(majorHolidayBlocks).flat().length} date ranges`;
+  const holidayPreferenceSummary = `${roster.length} fellows ranked`;
+
   return (
     <div style={{ padding: 24, maxWidth: 1150, margin: "0 auto", fontFamily: "sans-serif" }}>
       <style>{`
@@ -112,24 +123,6 @@ export default function App() {
           <LoadingPanel loading={loading} mode={loadingMode} />
           <TestResultPanel result={testResult} />
           <div style={{ background: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: 8, padding: 16, marginBottom: 20 }}>
-            <RosterEditor
-              roster={roster}
-              onRename={(id, name) => setRoster((current) => current.map((fellow) => (
-                fellow.id === id ? { ...fellow, name } : fellow
-              )))}
-            />
-
-            <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
-              <div>
-                <label style={labelStyle}>Start date</label>
-                <input value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>End date</label>
-                <input value={end} onChange={(e) => setEnd(e.target.value)} style={inputStyle} />
-              </div>
-            </div>
-
             <div style={{ marginBottom: 16, background: "#fff", border: "1px solid #e0e0e0", borderRadius: 6, padding: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>Rotation rules now included</div>
               <div style={{ fontSize: 13, color: "#555" }}>The solver assigns monthly consult, imaging, research, cath, ACHD/EP, and PCICU rotations and then builds call assignments from those rotations.</div>
@@ -142,40 +135,13 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ marginBottom: 16, background: "#fff", border: "1px solid #e0e0e0", borderRadius: 6, padding: 12 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: retryUntilValid ? 10 : 0 }}>
-                <input
-                  type="checkbox"
-                  checked={retryUntilValid}
-                  onChange={(e) => setRetryUntilValid(e.target.checked)}
-                />
-                <span style={{ fontWeight: 600 }}>Keep retrying until a valid schedule is found</span>
-              </label>
-              <div style={{ fontSize: 12, color: "#666" }}>
-                When enabled, the app will retry the same request with different solver seeds until validation passes or the attempt limit is reached.
-              </div>
-              {retryUntilValid && (
-                <div style={{ marginTop: 10 }}>
-                  <label style={labelStyle}>Maximum attempts</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="25"
-                    value={maxRetryAttempts}
-                    onChange={(e) => setMaxRetryAttempts(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
-                    style={{ ...inputStyle, width: 100 }}
-                  />
-                </div>
-              )}
-            </div>
-
             <div
               style={{
                 display: "flex",
                 gap: 10,
                 alignItems: "center",
                 flexWrap: "wrap",
-                marginBottom: 18,
+                marginBottom: 16,
                 padding: 12,
                 background: "#ffffff",
                 border: "1px solid #d8dee6",
@@ -209,6 +175,27 @@ export default function App() {
               >
                 Reset saved state
               </button>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", fontSize: 13, color: "#445" }}>
+                <input
+                  type="checkbox"
+                  checked={retryUntilValid}
+                  onChange={(e) => setRetryUntilValid(e.target.checked)}
+                />
+                <span>Retry until valid</span>
+              </label>
+              {retryUntilValid && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, color: "#445" }}>Attempts</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="25"
+                    value={maxRetryAttempts}
+                    onChange={(e) => setMaxRetryAttempts(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
+                    style={{ ...inputStyle, width: 80 }}
+                  />
+                </div>
+              )}
               {schedule.length > 0 && (
                 <button
                   onClick={exportWorkbook}
@@ -219,33 +206,78 @@ export default function App() {
               )}
             </div>
 
-            <BoardExamEditor
-              roster={roster}
-              boardExamIds={boardExamIds}
-              onToggle={(id) => setBoardExamIds((current) => (
-                current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-              ))}
-            />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: 16,
+                marginBottom: 16,
+              }}
+            >
+              <div style={{ background: "#fff", border: "1px solid #d8dee6", borderRadius: 8, padding: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>Core Setup</div>
+                <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+                  <div>
+                    <label style={labelStyle}>Start date</label>
+                    <input value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>End date</label>
+                    <input value={end} onChange={(e) => setEnd(e.target.value)} style={inputStyle} />
+                  </div>
+                </div>
+                <RosterEditor
+                  roster={roster}
+                  onRename={(id, name) => setRoster((current) => current.map((fellow) => (
+                    fellow.id === id ? { ...fellow, name } : fellow
+                  )))}
+                />
+              </div>
 
-            <PcicuExceptionMonthEditor
-              months={months}
-              selectedMonths={pcicuExceptionMonths}
-              onToggle={(monthKey) =>
-                setPcicuExceptionMonths((current) => (
-                  current.includes(monthKey)
-                    ? current.filter((item) => item !== monthKey)
-                    : [...current, monthKey].sort()
-                ))
-              }
-            />
+              <div style={{ background: "#fff", border: "1px solid #d8dee6", borderRadius: 8, padding: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>Exams And Monthly Exceptions</div>
+                <div style={{ fontSize: 12, color: "#667085", marginBottom: 10 }}>
+                  Board exams: {boardExamCount}. PICU exception months: {exceptionMonthSummary}.
+                </div>
+                <div style={{ maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
+                  <BoardExamEditor
+                    roster={roster}
+                    boardExamIds={boardExamIds}
+                    onToggle={(id) => setBoardExamIds((current) => (
+                      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+                    ))}
+                  />
 
-            <MajorHolidayBlockEditor blocks={majorHolidayBlocks} onChange={setMajorHolidayBlocks} />
-            <HolidayPreferenceEditor
-              roster={roster}
-              preferences={holidayPreferences}
-              onUpdate={(id, nextValue) => setHolidayPreferences((current) => ({ ...current, [id]: nextValue }))}
-            />
-            <VacationEditor roster={roster} vacations={vacations} onChange={setVacations} />
+                  <PcicuExceptionMonthEditor
+                    months={months}
+                    selectedMonths={pcicuExceptionMonths}
+                    onToggle={(monthKey) =>
+                      setPcicuExceptionMonths((current) => (
+                        current.includes(monthKey)
+                          ? current.filter((item) => item !== monthKey)
+                          : [...current, monthKey].sort()
+                      ))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            <CollapsibleSection title="Vacation Weeks" summary={`${vacationWeeksFilled}/${totalVacationSlots} weeks entered`}>
+              <VacationEditor roster={roster} vacations={vacations} onChange={setVacations} />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Holiday Preferences" summary={holidayPreferenceSummary}>
+              <HolidayPreferenceEditor
+                roster={roster}
+                preferences={holidayPreferences}
+                onUpdate={(id, nextValue) => setHolidayPreferences((current) => ({ ...current, [id]: nextValue }))}
+              />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Major Holiday Coverage Dates" summary={holidayBlockSummary}>
+              <MajorHolidayBlockEditor blocks={majorHolidayBlocks} onChange={setMajorHolidayBlocks} />
+            </CollapsibleSection>
 
             {error && (
               <div style={{ marginTop: 10, padding: "8px 12px", background: "#fde8e8", border: "1px solid #f5c2c2", borderRadius: 4, color: "#c0392b" }}>
