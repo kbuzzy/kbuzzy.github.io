@@ -10,9 +10,6 @@ MAX_SOLVER_SECONDS = 60
 OCTOBER_BOARD_WEIGHT = 10
 CATH_THURSDAY_WEIGHT = 2
 DIFFICULT_ROTATION_STREAK_WEIGHT = 3
-IN_HOUSE_RANGE_WEIGHT = 60
-IN_HOUSE_PAIRWISE_WEIGHT = 8
-TOTAL_CALL_RANGE_WEIGHT = 5
 PGY_PREFERENCE_WEIGHTS = {"PGY-4": 1, "PGY-5": 2, "PGY-6": 3}
 
 # The solver is intentionally scoped to one academic year so the quota
@@ -551,11 +548,48 @@ def generate_schedule(
         model.add(total <= max_total)
         model.add(total >= min_total)
 
+    in_house_range = max_in_house - min_in_house
+    in_house_pairwise_total = sum(in_house_pairwise_spread)
+    total_call_range = max_total - min_total
+    soft_score = sum(soft_terms)
+
+    # Prioritize fairness lexicographically instead of relying on a blended
+    # weighted sum. Any 1-unit improvement in in-house range must outweigh all
+    # possible gains from lower-priority objectives.
+    max_major_rank_score = len(DEFAULT_MAJOR_HOLIDAYS)
+    max_weekend_rank_score = len(HOLIDAY_WEEKENDS)
+    max_seniority_weight = max(PGY_PREFERENCE_WEIGHTS.values())
+    board_exam_soft_bound = OCTOBER_BOARD_WEIGHT * 2 * n
+    major_preference_soft_bound = len(major_half_info) * max_major_rank_score * max_seniority_weight
+    weekend_preference_soft_bound = len(HOLIDAY_WEEKENDS) * max_weekend_rank_score * max_seniority_weight
+    thursday_soft_bound = CATH_THURSDAY_WEIGHT * sum(
+        1
+        for d in range(days)
+        if (start_date + timedelta(days=d)).weekday() == 3 and d not in holiday_block_starts
+    )
+    difficult_streak_soft_bound = DIFFICULT_ROTATION_STREAK_WEIGHT * n * max(0, len(MONTH_KEYS) - 2)
+    soft_score_span = (
+        board_exam_soft_bound
+        + major_preference_soft_bound
+        + weekend_preference_soft_bound
+        + thursday_soft_bound
+        + difficult_streak_soft_bound
+    )
+    total_call_range_priority = soft_score_span + 1
+    in_house_pairwise_upper = len(ordered_in_house_days) * (n * (n - 1) // 2)
+    in_house_pairwise_priority = (days * total_call_range_priority) + soft_score_span + 1
+    in_house_range_priority = (
+        in_house_pairwise_upper * in_house_pairwise_priority
+        + days * total_call_range_priority
+        + soft_score_span
+        + 1
+    )
+
     objective = (
-        sum(soft_terms) * 100
-        - IN_HOUSE_RANGE_WEIGHT * (max_in_house - min_in_house)
-        - IN_HOUSE_PAIRWISE_WEIGHT * sum(in_house_pairwise_spread)
-        - TOTAL_CALL_RANGE_WEIGHT * (max_total - min_total)
+        soft_score
+        - total_call_range_priority * total_call_range
+        - in_house_pairwise_priority * in_house_pairwise_total
+        - in_house_range_priority * in_house_range
     )
     model.maximize(objective)
 
