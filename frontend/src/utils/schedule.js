@@ -322,7 +322,7 @@ export function listCandidateVacationWeeks(start, end, majorHolidayBlocks) {
 }
 
 export function createTypicalVacations(roster, start, end, majorHolidayBlocks) {
-  const candidates = listCandidateVacationWeeks(start, end, majorHolidayBlocks);
+  const candidates = shuffle(listCandidateVacationWeeks(start, end, majorHolidayBlocks));
   const needed = roster.length * MAX_VACATION_WEEKS;
   if (candidates.length < needed) {
     throw new Error("Not enough non-overlapping vacation weeks are available for the typical test.");

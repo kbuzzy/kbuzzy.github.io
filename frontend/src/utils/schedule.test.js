@@ -1,4 +1,11 @@
-import { buildCalendarEvents, getCallType } from "./schedule";
+import {
+  buildCalendarEvents,
+  createDefaultMajorHolidayBlocks,
+  createTypicalVacations,
+  getCallType,
+  listCandidateVacationWeeks,
+} from "./schedule";
+import { INITIAL_ROSTER } from "../config/schedule";
 
 describe("getCallType", () => {
   test("treats holiday weekends as holiday call", () => {
@@ -25,5 +32,22 @@ describe("buildCalendarEvents", () => {
 
     expect(events[0].title).toContain("Holiday Call");
     expect(events[0].resource.callType).toBe("Holiday Call");
+  });
+});
+
+describe("createTypicalVacations", () => {
+  test("draws from a shuffled candidate pool rather than earliest chronological weeks", () => {
+    const majorHolidayBlocks = createDefaultMajorHolidayBlocks();
+    const candidateWeeks = listCandidateVacationWeeks("07/01/2026", "06/30/2027", majorHolidayBlocks);
+    const randomSpy = jest.spyOn(Math, "random").mockReturnValue(0);
+
+    try {
+      const vacations = createTypicalVacations(INITIAL_ROSTER, "07/01/2026", "06/30/2027", majorHolidayBlocks);
+      const firstAssignedWeek = vacations[INITIAL_ROSTER[0].id][0];
+
+      expect(firstAssignedWeek).not.toEqual(candidateWeeks[0]);
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 });
