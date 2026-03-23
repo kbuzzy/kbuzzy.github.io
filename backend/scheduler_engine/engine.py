@@ -5,19 +5,17 @@ from ortools.sat.python import cp_model
 from .calendar_rules import build_call_blocks, idx, month_key, parse_iso, validate_schedule_inputs
 from .constants import (
     CATH_THURSDAY_WEIGHT,
-    DEFAULT_MAJOR_HOLIDAYS,
     DIFFICULT_ROTATION_STREAK_WEIGHT,
-    DIFFICULT_ROTATIONS,
     HOLIDAY_WEEKENDS,
     MAX_SOLVER_SECONDS,
     MONTH_KEYS,
     OCTOBER_BOARD_WEIGHT,
     PGY_PREFERENCE_WEIGHTS,
-    PGY_ROTATION_TARGETS,
     PGY_WEEKEND_TARGETS,
-    REQUIRED_PGY_COUNTS,
     ROTATIONS,
 )
+from .objective import configure_objective
+from .rotation_rules import add_rotation_constraints, build_hard_month_vars
 from .serialization import serialize_solution
 from .validation import build_validation
 
@@ -68,54 +66,22 @@ def generate_schedule(
         for day_idx in range(days)
     }
 
-    for fellow_idx in range(fellow_count):
-        for month_idx in range(len(MONTH_KEYS)):
-            model.add(sum(rotation[(fellow_idx, month_idx, rotation_idx)] for rotation_idx in range(len(ROTATIONS))) == 1)
-
-    for month_idx in range(len(MONTH_KEYS)):
-        model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["consult"])] for fellow_idx in range(fellow_count)) == 1)
-        model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["cath"])] for fellow_idx in range(fellow_count)) == 1)
-        if MONTH_KEYS[month_idx] in exception_tuesday_months:
-            model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["pcicu"])] for fellow_idx in range(fellow_count)) == 0)
-        else:
-            model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["pcicu"])] for fellow_idx in range(fellow_count)) == 1)
-        model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["achd_ep"])] for fellow_idx in range(fellow_count)) <= 1)
-
-    for fellow_idx, fellow in enumerate(fellows):
-        targets = PGY_ROTATION_TARGETS[pgy_years[fellow]]
-        for rotation_name, target in targets.items():
-            rotation_slot = rotation_index[rotation_name]
-            model.add(sum(rotation[(fellow_idx, month_idx, rotation_slot)] for month_idx in range(len(MONTH_KEYS))) == target)
-
-    july_index = month_index["2026-07"]
-    for fellow_idx, fellow in enumerate(fellows):
-        if pgy_years[fellow] == "PGY-4":
-            model.add(rotation[(fellow_idx, july_index, rotation_index["imaging"])] == 1)
-
-    for fellow_idx in range(fellow_count):
-        for month_idx in range(len(MONTH_KEYS) - 1):
-            for rotation_name in ROTATIONS:
-                if rotation_name == "research":
-                    continue
-                rotation_slot = rotation_index[rotation_name]
-                model.add(rotation[(fellow_idx, month_idx, rotation_slot)] + rotation[(fellow_idx, month_idx + 1, rotation_slot)] <= 1)
-
-    research_idx = rotation_index["research"]
-    for fellow_idx in range(fellow_count):
-        for month_idx in range(len(MONTH_KEYS) - 2):
-            model.add(
-                rotation[(fellow_idx, month_idx, research_idx)]
-                + rotation[(fellow_idx, month_idx + 1, research_idx)]
-                + rotation[(fellow_idx, month_idx + 2, research_idx)]
-                <= 2
-            )
-
-    hard_month = {}
-    for fellow_idx in range(fellow_count):
-        for month_idx in range(len(MONTH_KEYS)):
-            hard_month[(fellow_idx, month_idx)] = model.new_bool_var(f"hard_month_{fellow_idx}_{month_idx}")
-            difficult_sum = sum(rotation[(fellow_idx, month_idx, rotation_index[name])] for name in DIFFICULT_ROTATIONS)
-            model.add(hard_month[(fellow_idx, month_idx)] == difficult_sum)
+    add_rotation_constraints(
+        model=model,
+        rotation=rotation,
+        fellow_count=fellow_count,
+        rotation_index=rotation_index,
+        month_index=month_index,
+        pgy_years=pgy_years,
+        fellows=fellows,
+        exception_tuesday_months=exception_tuesday_months,
+    )
+    hard_month = build_hard_month_vars(
+        model=model,
+        rotation=rotation,
+        fellow_count=fellow_count,
+        rotation_index=rotation_index,
+    )
 
     call_blocks = build_call_blocks(start_date, end_date, major_holidays)
     block_starts = call_blocks["block_starts"]
@@ -298,69 +264,17 @@ def generate_schedule(
             model.add(hard_run >= hard_month[(fellow_idx, month_idx)] + hard_month[(fellow_idx, month_idx + 1)] + hard_month[(fellow_idx, month_idx + 2)] - 2)
             soft_terms.append(-DIFFICULT_ROTATION_STREAK_WEIGHT * hard_run)
 
-    ordered_in_house_days = sorted(in_house_days)
-    in_house_counts = [sum(call[(fellow_idx, day_idx)] for day_idx in ordered_in_house_days) for fellow_idx in range(fellow_count)]
-    max_in_house = model.new_int_var(0, len(ordered_in_house_days), "max_in_house")
-    min_in_house = model.new_int_var(0, len(ordered_in_house_days), "min_in_house")
-    for total in in_house_counts:
-        model.add(total <= max_in_house)
-        model.add(total >= min_in_house)
-
-    in_house_pairwise_spread = []
-    for left in range(fellow_count):
-        for right in range(left + 1, fellow_count):
-            diff = model.new_int_var(0, len(ordered_in_house_days), f"in_house_diff_{left}_{right}")
-            model.add_abs_equality(diff, in_house_counts[left] - in_house_counts[right])
-            in_house_pairwise_spread.append(diff)
-
-    total_counts = [sum(call[(fellow_idx, day_idx)] for day_idx in range(days)) for fellow_idx in range(fellow_count)]
-    max_total = model.new_int_var(0, days, "max_total")
-    min_total = model.new_int_var(0, days, "min_total")
-    for total in total_counts:
-        model.add(total <= max_total)
-        model.add(total >= min_total)
-
-    in_house_range = max_in_house - min_in_house
-    in_house_pairwise_total = sum(in_house_pairwise_spread)
-    total_call_range = max_total - min_total
-    soft_score = sum(soft_terms)
-
-    max_major_rank_score = len(DEFAULT_MAJOR_HOLIDAYS)
-    max_weekend_rank_score = len(HOLIDAY_WEEKENDS)
-    max_seniority_weight = max(PGY_PREFERENCE_WEIGHTS.values())
-    board_exam_soft_bound = OCTOBER_BOARD_WEIGHT * 2 * fellow_count
-    major_preference_soft_bound = len(major_half_info) * max_major_rank_score * max_seniority_weight
-    weekend_preference_soft_bound = len(HOLIDAY_WEEKENDS) * max_weekend_rank_score * max_seniority_weight
-    thursday_soft_bound = CATH_THURSDAY_WEIGHT * sum(
-        1
-        for day_idx in range(days)
-        if (start_date + timedelta(days=day_idx)).weekday() == 3 and day_idx not in holiday_block_starts
+    configure_objective(
+        model=model,
+        call=call,
+        soft_terms=soft_terms,
+        in_house_days=in_house_days,
+        fellow_count=fellow_count,
+        days=days,
+        start_date=start_date,
+        holiday_block_starts=holiday_block_starts,
+        major_half_info=major_half_info,
     )
-    difficult_streak_soft_bound = DIFFICULT_ROTATION_STREAK_WEIGHT * fellow_count * max(0, len(MONTH_KEYS) - 2)
-    soft_score_span = (
-        board_exam_soft_bound
-        + major_preference_soft_bound
-        + weekend_preference_soft_bound
-        + thursday_soft_bound
-        + difficult_streak_soft_bound
-    )
-    total_call_range_priority = soft_score_span + 1
-    in_house_pairwise_upper = len(ordered_in_house_days) * (fellow_count * (fellow_count - 1) // 2)
-    in_house_pairwise_priority = (days * total_call_range_priority) + soft_score_span + 1
-    in_house_range_priority = (
-        in_house_pairwise_upper * in_house_pairwise_priority
-        + days * total_call_range_priority
-        + soft_score_span
-        + 1
-    )
-
-    objective = (
-        soft_score
-        - total_call_range_priority * total_call_range
-        - in_house_pairwise_priority * in_house_pairwise_total
-        - in_house_range_priority * in_house_range
-    )
-    model.maximize(objective)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = MAX_SOLVER_SECONDS
