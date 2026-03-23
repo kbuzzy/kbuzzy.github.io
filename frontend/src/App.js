@@ -50,6 +50,37 @@ import { btnStyle, inputStyle, labelStyle } from "./styles/ui";
 
 const localizer = momentLocalizer(moment);
 
+function formatApiErrorDetail(detail, fallbackStatus) {
+  if (!detail) return `Server error: ${fallbackStatus}`;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => {
+      if (typeof item === "string") return item;
+      if (item?.msg) {
+        const location = Array.isArray(item.loc) ? item.loc.join(" -> ") : item.loc;
+        return location ? `${location}: ${item.msg}` : item.msg;
+      }
+      return null;
+    }).filter(Boolean);
+    return messages.length ? messages.join(" | ") : JSON.stringify(detail);
+  }
+  return JSON.stringify(detail);
+}
+
+function getValidationForResult(data, start, end, exceptionMonths, roster) {
+  if (Array.isArray(data.validation)) return data.validation;
+  return buildValidation(
+    data.schedule || [],
+    data.rotations || [],
+    data.holiday_weekends || [],
+    data.major_holidays || [],
+    start,
+    end,
+    exceptionMonths,
+    roster,
+  );
+}
+
 export default function App() {
   const storedState = useMemo(() => readStoredState(), []);
   const [roster, setRoster] = useState(storedState?.roster || INITIAL_ROSTER);
@@ -182,20 +213,7 @@ export default function App() {
   useEffect(() => {
     if (!schedule.length) {
       setValidation([]);
-      return;
     }
-    setValidation(
-      buildValidation(
-        schedule,
-        rotations,
-        holidayWeekends,
-        majorHolidays,
-        start,
-        end,
-        pcicuExceptionMonths,
-        roster,
-      ),
-    );
   }, [end, holidayWeekends, majorHolidays, pcicuExceptionMonths, roster, rotations, schedule, start]);
 
   const buildSchedulePayload = useCallback((options) => {
@@ -238,7 +256,7 @@ export default function App() {
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || `Server error: ${response.status}`);
+      throw new Error(formatApiErrorDetail(body.detail, response.status));
     }
     return response.json();
   }, []);
@@ -266,16 +284,7 @@ export default function App() {
         solverSeed: Math.floor(Math.random() * 1_000_000_000),
       });
       const data = await requestSchedule(payload);
-      const nextValidation = buildValidation(
-        data.schedule || [],
-        data.rotations || [],
-        data.holiday_weekends || [],
-        data.major_holidays || [],
-        start,
-        end,
-        selectedExceptionMonths,
-        roster,
-      );
+      const nextValidation = getValidationForResult(data, start, end, selectedExceptionMonths, roster);
       const validationPassed = nextValidation.every((check) => check.ok);
       lastAttempt = { data, nextValidation, validationPassed, attempt, totalAttempts };
       if (validationPassed || !allowRetryUntilValid) {

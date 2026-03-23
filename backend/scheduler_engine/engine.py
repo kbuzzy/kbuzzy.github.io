@@ -19,6 +19,7 @@ from .constants import (
     ROTATIONS,
 )
 from .serialization import serialize_solution
+from .validation import build_validation
 
 
 def generate_schedule(
@@ -369,7 +370,7 @@ def generate_schedule(
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError("No feasible schedule found for the current rotation, vacation, and call rules.")
 
-    return serialize_solution(
+    result = serialize_solution(
         solver,
         fellows,
         start_date,
@@ -379,3 +380,15 @@ def generate_schedule(
         rotation_index,
         major_half_info,
     )
+    result["validation"] = build_validation(
+        schedule=result["schedule"],
+        rotations=result["rotations"],
+        holiday_weekends=result["holiday_weekends"],
+        major_holidays=result["major_holidays"],
+        start_date=start_date,
+        end_date=end_date,
+        exception_months=sorted(exception_tuesday_months),
+        fellows=fellows,
+        pgy_years=pgy_years,
+    )
+    return result
