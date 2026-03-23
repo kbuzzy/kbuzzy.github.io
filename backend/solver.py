@@ -563,7 +563,6 @@ def generate_schedule(
     solver.parameters.max_time_in_seconds = MAX_SOLVER_SECONDS
     if solver_seed is not None:
         solver.parameters.random_seed = solver_seed
-        solver.parameters.randomize_search = True
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError("No feasible schedule found for the current rotation, vacation, and call rules.")
@@ -599,14 +598,14 @@ def generate_schedule(
             }
         )
 
-    major_holidays = []
+    major_holidays_results = []
     for info in major_half_info:
         assigned_fellow = None
         for f in range(n):
             if solver.value(call[(f, info["start_idx"])]) == 1:
                 assigned_fellow = fellows[f]
                 break
-        major_holidays.append(
+        major_holidays_results.append(
             {
                 "holiday": info["holiday"],
                 "label": info["label"],
@@ -620,5 +619,5 @@ def generate_schedule(
         "schedule": schedule,
         "rotations": rotations,
         "holiday_weekends": holiday_weekends,
-        "major_holidays": major_holidays,
+        "major_holidays": major_holidays_results,
     }

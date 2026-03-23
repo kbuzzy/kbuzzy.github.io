@@ -154,7 +154,7 @@ function buildVacationRows(roster, vacations) {
   return rows;
 }
 
-function buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr) {
+function buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr, majorHolidayBlocks) {
   const byDate = {};
   schedule.forEach((item) => { byDate[item.date] = item.fellow; });
 
@@ -167,6 +167,17 @@ function buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr)
       holidayCoveredDates.add(cur.format(DATE_FMT));
       cur.add(1, "day");
     }
+  });
+
+  Object.values(majorHolidayBlocks || DEFAULT_MAJOR_HOLIDAY_BLOCKS).forEach((halves) => {
+    halves.forEach((half) => {
+      const cur = moment(half.start, DATE_FMT);
+      const end = moment(half.end, DATE_FMT);
+      while (cur.isSameOrBefore(end)) {
+        holidayCoveredDates.add(cur.format(DATE_FMT));
+        cur.add(1, "day");
+      }
+    });
   });
 
   holidayWeekends.forEach((item) => {
@@ -380,7 +391,7 @@ function exportCalendarWorkbook(
 
   const vacationRows = buildVacationRows(roster, vacations);
   const majorHolidayRows = buildMajorHolidayRows(majorHolidayAssignments);
-  const weekendRows = buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr);
+  const weekendRows = buildWeekendAssignmentRows(schedule, holidayWeekends, startStr, endStr, majorHolidayBlocks);
 
   const assignmentsRows = [];
   const pushSection = (title, headers, rows) => {
@@ -1469,7 +1480,6 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
   const pcicuWeekendErrors = [];
   const consecutiveWeekendErrors = [];
   const consecutiveCallErrors = [];
-  const preHolidayCallErrors = [];
   const thursdayWeekendErrors = [];
   const cathThursdayMatches = [];
   const holidayCounts = {};
@@ -1478,14 +1488,12 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
   const exceptionMonthSet = new Set(exceptionMonths);
   const holidayStartMap = Object.fromEntries(HOLIDAY_WEEKENDS.map((item) => [item.start, item]));
   const holidayCoveredDates = new Set();
-  const holidayBlockStartSet = new Set();
   const majorHolidayStartMap = Object.fromEntries(
     (majorHolidays || []).map((item) => [item.start, item]),
   );
   const blockStartByDate = {};
   const weekendAssignments = [];
   HOLIDAY_WEEKENDS.forEach((item) => {
-    holidayBlockStartSet.add(item.start);
     const curHoliday = moment(item.start, DATE_FMT);
     const endHoliday = moment(item.end, DATE_FMT);
     while (curHoliday.isSameOrBefore(endHoliday)) {
@@ -1496,7 +1504,6 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     }
   });
   (majorHolidays || []).forEach((item) => {
-    holidayBlockStartSet.add(item.start);
     const curHoliday = moment(item.start, DATE_FMT);
     const endHoliday = moment(item.end, DATE_FMT);
     while (curHoliday.isSameOrBefore(endHoliday)) {
@@ -1505,14 +1512,6 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
       curHoliday.add(1, "day");
     }
   });
-
-  const isInHouseDate = (dateMoment) => {
-    const dateStr = dateMoment.format(DATE_FMT);
-    if (holidayCoveredDates.has(dateStr)) return false;
-    const month = dateMoment.format("YYYY-MM");
-    if (dateMoment.day() === 2) return !exceptionMonthSet.has(month);
-    return dateMoment.day() === 3 || dateMoment.day() === 4;
-  };
 
   const cur = moment(start, DATE_FMT);
   const endDate = moment(end, DATE_FMT);
@@ -1637,21 +1636,11 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     const assigned = byDate[dateStr];
     if (!assigned) missing.push(dateStr);
 
-    const dateStrHoliday = cur.format(DATE_FMT);
-    const holidayBlock = HOLIDAY_WEEKENDS.find(
-      (item) => moment(dateStrHoliday, DATE_FMT).isBetween(
-        moment(item.start, DATE_FMT),
-        moment(item.end, DATE_FMT),
-        "day",
-        "[]",
-      ),
-    );
-
-    if (cur.day() === 1 && !holidayBlock && assigned !== consultByMonth[month]) {
+    if (cur.day() === 1 && !holidayCoveredDates.has(dateStr) && assigned !== consultByMonth[month]) {
       mondayErrors.push(`${dateStr}: expected ${consultByMonth[month]}, got ${assigned}`);
     }
 
-    if (cur.day() === 2) {
+    if (cur.day() === 2 && !holidayCoveredDates.has(dateStr)) {
       const expected = exceptionMonthSet.has(month) ? consultByMonth[month] : pcicuByMonth[month];
       if (assigned !== expected) {
         tuesdayErrors.push(`${dateStr}: expected ${expected}, got ${assigned}`);
@@ -1736,7 +1725,9 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     if (cur.day() === 4 && !holidayCoveredDates.has(dateStr)) {
       const thursdayFellow = assigned;
       const nextFriday = cur.clone().add(1, "day").format(DATE_FMT);
-      if (thursdayFellow && byDate[nextFriday] === thursdayFellow) {
+      const fridayBlockStart = blockStartByDate[nextFriday] || nextFriday;
+      const fridayFellow = byDate[fridayBlockStart];
+      if (thursdayFellow && fridayFellow === thursdayFellow) {
         thursdayWeekendErrors.push(`${dateStr}: ${thursdayFellow} also took the following weekend`);
       }
     }
@@ -1784,14 +1775,15 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
     const nextBlock = blockStartByDate[next.date];
     if (currentBlock && currentBlock === nextBlock) continue;
 
-    if (isInHouseDate(currentMoment) && isInHouseDate(nextMoment)) {
+    const isAllowedConsultException =
+      currentMoment.day() === 1 &&
+      nextMoment.day() === 2 &&
+      exceptionMonthSet.has(currentMoment.format("YYYY-MM")) &&
+      current.fellow === consultByMonth[currentMoment.format("YYYY-MM")];
+
+    if (!isAllowedConsultException) {
       consecutiveCallErrors.push(
-        `${current.fellow} worked consecutive in-house call days on ${current.date} and ${next.date}`,
-      );
-    }
-    if (holidayBlockStartSet.has(next.date)) {
-      preHolidayCallErrors.push(
-        `${current.fellow} worked ${current.date} immediately before holiday call starting ${next.date}`,
+        `${current.fellow} worked consecutive call days on ${current.date} and ${next.date}`
       );
     }
   }
@@ -1844,19 +1836,11 @@ function buildValidation(schedule, rotations, holidayWeekends, majorHolidays, st
   });
   checks.push({
     ok: consecutiveCallErrors.length === 0,
-    label: "Consecutive in-house days",
+    label: "Consecutive call days",
     detail: consecutiveCallErrors.length === 0
-      ? "No fellow is assigned to in-house call on consecutive days."
+      ? "No fellow is assigned to back-to-back call days outside allowed blocks."
       : consecutiveCallErrors.slice(0, 3).join(" | "),
-    suggestion: consecutiveCallErrors.length === 0 ? "" : "Regenerate or adjust vacations so Tuesday-Wednesday or Wednesday-Thursday in-house call is split between different fellows.",
-  });
-  checks.push({
-    ok: preHolidayCallErrors.length === 0,
-    label: "Day before holiday call",
-    detail: preHolidayCallErrors.length === 0
-      ? "No fellow is on call immediately before starting a holiday block."
-      : preHolidayCallErrors.slice(0, 3).join(" | "),
-    suggestion: preHolidayCallErrors.length === 0 ? "" : "Reassign the day before the holiday block or the holiday block itself so one fellow is not scheduled on both.",
+    suggestion: consecutiveCallErrors.length === 0 ? "" : "Reduce conflicting vacations or adjust exception months so consecutive call can be reassigned.",
   });
   checks.push({
     ok: consultWeekendErrors.length === 0,
