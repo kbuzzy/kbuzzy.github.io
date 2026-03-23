@@ -1,70 +1,57 @@
-# Getting Started with Create React App
+# Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This frontend is a React application for configuring fellowship scheduling inputs, calling the FastAPI backend, visualizing the solved schedule, and exporting calendar data.
 
-## Available Scripts
+## Structure
 
-In the project directory, you can run:
+Key files under [src](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src):
 
-### `npm start`
+- [App.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/App.js): top-level page layout
+- [hooks/useScheduler.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/hooks/useScheduler.js): API orchestration, retries, persistence, and result state
+- [components/FormSections.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/components/FormSections.js): roster, vacation, holiday, and rule configuration UI
+- [components/ResultSections.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/components/ResultSections.js): solved schedule, validation, holiday, and rotation output UI
+- [config/schedule.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/config/schedule.js): constants such as API URL, default roster, and default exception months
+- [utils/schedule.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/schedule.js): schedule helpers, event building, and default fixture creation
+- [utils/validation.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/validation.js): validation fallback when backend validation is unavailable
+- [utils/exportWorkbook.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/exportWorkbook.js): workbook export helpers
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Data Flow
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+The frontend sends scheduling inputs to `POST /schedule` and expects:
 
-### `npm test`
+- `schedule`
+- `rotations`
+- `holiday_weekends`
+- `major_holidays`
+- `validation`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+When present, backend `validation` is used directly. Backend `schedule` items also include:
 
-### `npm run build`
+- `call_type`
+- `is_in_house`
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Those fields are preferred over frontend date inference.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Local Development
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+From [frontend](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend):
 
-### `npm run eject`
+```bash
+npm install
+npm start
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+The app opens at [http://localhost:3000](http://localhost:3000).
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Tests
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+Run the frontend test suite with:
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+npm test -- --watch=false
+```
 
-## Learn More
+Current test coverage includes:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- [App.test.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/App.test.js)
+- [schedule.test.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/schedule.test.js)

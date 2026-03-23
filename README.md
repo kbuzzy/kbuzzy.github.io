@@ -1,313 +1,215 @@
 # Fellowship Scheduler
 
-Fellowship Scheduler is a React + FastAPI application that now solves two linked problems at once:
+Fellowship Scheduler is a React + FastAPI application for generating a full academic year of pediatric cardiology fellowship rotations and call assignments.
 
-- monthly clinical rotation assignment for a full academic year
-- nightly call assignment driven by those monthly rotation assignments
+The current codebase is organized around a backend scheduling engine that owns the core rules and a frontend that focuses on configuration, visualization, and exports.
 
-## Fixed Program Structure
+## Scheduling Model
 
-The current model assumes a single academic year from `07/01/2026` through `06/30/2027` and a fixed roster of 6 fellows:
+The solver currently supports one fixed academic year:
+
+- `07/01/2026` through `06/30/2027`
+
+The roster is also fixed at six fellows:
 
 - 2 first-year fellows (`PGY-4`)
 - 2 second-year fellows (`PGY-5`)
 - 2 third-year fellows (`PGY-6`)
 
-The frontend keeps that 2-2-2 PGY structure fixed, but you can edit each fellow's name directly.
+Here, `PGY-4`, `PGY-5`, and `PGY-6` correspond to first-, second-, and third-year fellowship.
 
-## Rotation Types
+The backend solves two linked problems:
 
-The solver assigns one full-month daytime clinical rotation to every fellow for every calendar month.
+1. monthly daytime rotation assignments
+2. nightly/weekend/holiday call assignments constrained by those rotations
 
-Supported rotation types:
+## Core Rules
+
+### Rotations
+
+Supported monthly rotations:
 
 - `consult`
 - `imaging`
 - `research`
 - `cath`
-- `ACHD/EP`
-- `PCICU`
+- `achd_ep`
+- `pcicu`
 
-Each monthly rotation lasts for the entire calendar month.
+High-level rotation rules:
 
-`PGY-4`, `PGY-5`, and `PGY-6` here refer to first-, second-, and third-year fellowship, respectively.
+- Every fellow receives exactly one rotation per month.
+- `consult`, `cath`, `pcicu`, and `achd_ep` are single-slot monthly assignments.
+- `imaging` and `research` can hold multiple fellows in the same month.
+- Both `PGY-4` fellows must be on imaging in July 2026.
+- Non-research rotations cannot repeat in consecutive months.
+- Research can repeat, but no fellow may have more than two consecutive research months.
+- October board exam fellows are biased toward lighter October rotations when feasible.
 
-## Rotation Quotas by PGY
+### Call
 
-### First-Year Fellowship (`PGY-4`)
+High-level call rules:
 
-- 3 months of consult
-- 1 month of PCICU
-- 4 months of cath
-- 3 months of imaging
-- 1 month of research
-- 0 months of ACHD/EP
+- Friday-Sunday is one weekend block.
+- Holiday weekends are treated as special multi-day blocks.
+- Major holidays are split into two half-blocks.
+- Mondays go to the monthly consult fellow.
+- Tuesdays usually go to the monthly PCICU fellow.
+- In six selected exception months, Tuesday instead goes to the monthly consult fellow.
+- Consult fellows are excluded from other call in their consult month.
+- PCICU fellows cannot take weekend or holiday-weekend call in their PCICU month.
+- No one can work back-to-back call days outside allowed block exceptions.
+- Weekend blocks must stay with one fellow.
+- No fellow can work consecutive weekends.
+- Thursday call cannot flow directly into that same fellow taking the following weekend block.
 
-### Second-Year Fellowship (`PGY-5`)
+Important call classification detail:
 
-- 2 months of consult
-- 1 month of PCICU
-- 1 month of cath
-- 3 months of imaging
-- 1 month of ACHD/EP
-- 4 months of research
+- Holiday call is not counted as in-house call.
+- In-house call refers to routine Tuesday, Wednesday, and Thursday in-house nights, not holiday assignments.
 
-### Third-Year Fellowship (`PGY-6`)
-
-- 1 month of consult
-- 1 month of cath
-- 1 month of imaging
-- 1 month of PCICU
-- 1 month of ACHD/EP
-- 7 months of research
-
-## Rotation Constraints
-
-- Every fellow gets exactly one rotation per month.
-- `consult`, `cath`, `PCICU`, and `ACHD/EP` are single-slot rotations.
-- `imaging` and `research` may have multiple fellows in the same month.
-- Both first-year fellows must be on `imaging` in `July 2026`.
-- No fellow can repeat the same rotation in consecutive months.
-- `research` is the only exception and may repeat in back-to-back months, but no fellow can have more than 2 research months in a row.
-- Long runs of the harder rotations `consult`, `cath`, and `PCICU` are discouraged, and stretches longer than 2 months are treated as a soft penalty when the solver optimizes.
-- Fellows can optionally be flagged as taking board certification exams in October.
-- For October board exam takers, the solver prefers `imaging` or `research` in `October 2026` when feasible.
-- Each fellow can rank major holidays and holiday weekends from most preferred to work to least preferred to work.
-- Holiday preference approval is a soft objective that is weighted by seniority: third-year fellowship (`PGY-6`) over second-year fellowship (`PGY-5`) over first-year fellowship (`PGY-4`).
-
-## Call Rules
-
-Call is built after the monthly rotations are assigned.
-
-- Friday-Sunday is one weekend call block.
-- Six holiday weekends are special blocks and each fellow must receive exactly one of them.
-- Each major holiday is split into two halves, and one fellow is assigned to each half.
-- Thanksgiving halves default to `11/25/2026-11/26/2026` and `11/27/2026-11/29/2026`.
-- Christmas halves default to `12/22/2026-12/24/2026` and `12/25/2026-12/27/2026`.
-- New Year's halves default to `12/28/2026-12/30/2026` and `12/31/2026-01/03/2027`.
-- Those major holiday half dates are editable in the UI and are intended to vary year to year.
-- Each fellow is assigned exactly one half of one major holiday per year.
-- The same fellow must cover Friday, Saturday, and Sunday.
-- If the holiday falls on a Friday, that holiday weekend expands to Thursday-Sunday.
-- If the holiday falls between Saturday and Monday, that holiday weekend expands to Friday-Monday.
-- Monday always goes to the monthly `consult` fellow.
-- Tuesday usually goes to the monthly `PCICU` fellow.
-- In 6 selected exception months, PICU covers Tuesday nights, so Tuesday instead goes to the monthly `consult` fellow.
-- The consult fellow cannot take call on any other days besides Monday and the applicable Tuesday exception months.
-- The monthly `PCICU` fellow cannot take any weekend or holiday-weekend block in that same calendar month.
-- No fellow can work call on two consecutive days unless both days are part of the same weekend or holiday-weekend block.
-- The only weekday consecutive-call exception is the consult fellow covering both Monday and Tuesday in a selected PCICU exception month.
-- The consult fellow cannot take a Friday-Sunday weekend block in their consult month.
-- Fellows who are on a non-holiday Thursday call cannot also take the following weekend block, whether that next weekend is a normal weekend or a holiday weekend.
-- No fellow can be assigned to two weekend blocks in a row.
-- The monthly `cath` fellow is preferred on Thursday nights when feasible.
-
-The six holiday weekends in the current academic year are:
-
-- July 4
-- Labor Day
-- MLK Day
-- Good Friday
-- Memorial Day
-- Juneteenth
-
-For the `2026-2027` academic year, the default PICU-covered Tuesday exception months are:
-
-- August 2026
-- November 2026
-- January 2027
-- February 2027
-- April 2027
-- May 2027
-
-## Weekend Quotas
-
-Weekend totals are enforced exactly by PGY:
-
-- first-year fellowship (`PGY-4`): 12 weekend blocks each
-- second-year fellowship (`PGY-5`): 9 weekend blocks each
-- third-year fellowship (`PGY-6`): 5 weekend blocks each
-
-With two fellows in each class, those targets sum to 52 weekend blocks, which matches the academic year.
-
-## Frontend Workflow
-
-The React app lets you:
-
-- rename each of the 6 fellows
-- manage four default vacation weeks for each fellow
-- mark any fellow as an October board-exam taker
-- choose the 6 PICU-covered exception months for Tuesday-night call rules
-- rank major holidays and holiday weekends for each fellow
-- generate the full rotation + call schedule
-- switch to a dedicated `Rules & Validation` tab that explains the scheduling model and lists the active validation checks
-- review the solved monthly rotations in a table
-- review the assigned holiday weekends
-- review the call schedule in a calendar
-- export the schedule as a monthly CSV
-
-The `Rules & Validation` tab is also the place where schedule conflicts and validation failures are surfaced.
-
-## API
+## Backend API
 
 The backend exposes:
 
 - `GET /`
 - `POST /schedule`
 
-Example request:
+`POST /schedule` accepts a scheduling request with:
 
-```json
-{
-  "fellows": [
-    "Alice Smith",
-    "Brooke Jones",
-    "Carla Lee",
-    "Dana Patel",
-    "Evan Kim",
-    "Frank Wu"
-  ],
-  "start": "07/01/2026",
-  "end": "06/30/2027",
-  "vacations": {
-    "Alice Smith": ["07/06/2026", "07/07/2026", "07/08/2026", "07/09/2026", "07/10/2026"]
-  },
-  "holidays": {},
-  "pgy_years": {
-    "Alice Smith": "PGY-4",
-    "Brooke Jones": "PGY-4",
-    "Carla Lee": "PGY-5",
-    "Dana Patel": "PGY-5",
-    "Evan Kim": "PGY-6",
-    "Frank Wu": "PGY-6"
-  },
-  "board_exam_fellows": ["Alice Smith"],
-  "holiday_preferences": {
-    "Alice Smith": {
-      "majorHolidays": ["Christmas", "Thanksgiving", "New Year's"],
-      "holidayWeekends": ["Labor Day", "MLK Day", "July 4", "Good Friday", "Memorial Day", "Juneteenth"]
-    }
-  },
-  "major_holiday_blocks": {
-    "Thanksgiving": [
-      { "start": "2026-11-25", "end": "2026-11-26" },
-      { "start": "2026-11-27", "end": "2026-11-29" }
-    ]
-  }
-}
-```
+- `fellows`
+- `start`
+- `end`
+- `vacations`
+- `holidays`
+- `pgy_years`
+- `board_exam_fellows`
+- `holiday_preferences`
+- `major_holiday_blocks`
+- `pcicu_exception_months`
+- `solver_seed` (optional)
 
-In a real request, `holiday_preferences` must be provided for every fellow. The example above is abbreviated for readability.
+The response includes:
 
-Example response shape:
+- `schedule`
+- `rotations`
+- `holiday_weekends`
+- `major_holidays`
+- `validation`
 
-```json
-{
-  "schedule": [
-    { "date": "07/01/2026", "fellow": "Dana Patel" }
-  ],
-  "rotations": [
-    { "month": "2026-07", "fellow": "Alice Smith", "rotation": "imaging" }
-  ],
-  "holiday_weekends": [
-    { "label": "July 4", "start": "07/03/2026", "end": "07/06/2026", "fellow": "Brooke Jones" }
-  ],
-  "major_holidays": [
-    { "holiday": "Thanksgiving", "label": "Thanksgiving A", "start": "11/25/2026", "end": "11/26/2026", "fellow": "Dana Patel" }
-  ]
-}
-```
+Each `schedule` item now includes backend-owned call metadata:
 
-## Project Structure
+- `date`
+- `fellow`
+- `call_type`
+- `is_in_house`
 
-```text
-backend/
-  main.py      FastAPI app and request validation
-  solver.py    OR-Tools rotation + call model
-frontend/
-  src/App.js   Main React UI
-```
+This lets the frontend render and summarize call without re-deriving those semantics from dates.
 
-## Running the Project
+## Codebase Structure
 
 ### Backend
 
-From `/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend`:
+The backend entrypoint is [backend/main.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/main.py). It handles request validation, CORS, and calls into the scheduling engine.
+
+The scheduling engine lives in [backend/scheduler_engine](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine):
+
+- [constants.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/constants.py): fixed academic-year constants, quotas, holiday definitions, and PGY targets
+- [calendar_rules.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/calendar_rules.py): input validation, holiday normalization, and block construction
+- [rotation_rules.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/rotation_rules.py): monthly rotation constraints and helper logic
+- [objective.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/objective.py): fairness and preference objective construction
+- [serialization.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/serialization.py): schedule, rotation, holiday, and call metadata serialization
+- [validation.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/validation.py): backend-owned post-solve validation checks
+- [engine.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/scheduler_engine/engine.py): overall OR-Tools model setup and solve orchestration
+
+[backend/solver.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/solver.py) remains as the compatibility import surface for `generate_schedule`.
+
+### Frontend
+
+The React app lives under [frontend/src](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src):
+
+- [App.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/App.js): page shell and high-level composition
+- [hooks/useScheduler.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/hooks/useScheduler.js): schedule orchestration, API requests, retries, persistence, and exports
+- [components/FormSections.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/components/FormSections.js): scheduler input controls
+- [components/ResultSections.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/components/ResultSections.js): solved schedule, validation, and results display
+- [config/schedule.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/config/schedule.js): defaults, API URL, and initial roster configuration
+- [utils/schedule.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/schedule.js): schedule shaping, defaults, and frontend date helpers
+- [utils/validation.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/validation.js): client-side validation fallback when backend validation is unavailable
+- [utils/exportWorkbook.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/exportWorkbook.js): Excel export generation
+
+## Validation Ownership
+
+The backend is the source of truth for solved-schedule validation.
+
+The `/schedule` response includes a `validation` array that the frontend displays directly. The frontend still has a fallback validator for resilience, but new rule changes should be implemented on the backend first.
+
+## Test Structure
+
+Backend tests are split into fast unit tests and slower solve-backed regression tests.
+
+Unit tests:
+
+- [backend/tests/unit/test_calendar_rules.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/tests/unit/test_calendar_rules.py)
+- [backend/tests/unit/test_serialization.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/tests/unit/test_serialization.py)
+- [backend/tests/unit/test_validation.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/tests/unit/test_validation.py)
+
+Integration regression tests:
+
+- [backend/tests/integration/test_schedule_regression.py](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/tests/integration/test_schedule_regression.py)
+
+Frontend tests:
+
+- [frontend/src/utils/schedule.test.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/utils/schedule.test.js)
+- [frontend/src/App.test.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/App.test.js)
+
+Recommended commands:
+
+```bash
+# Backend fast unit tests
+backend/venv/bin/python -m unittest discover -s backend/tests/unit -v
+
+# Backend full-year regression tests
+backend/venv/bin/python -m unittest discover -s backend/tests/integration -v
+
+# Frontend tests
+cd frontend
+npm test -- --watch=false
+```
+
+## Running Locally
+
+### Backend
+
+From [backend](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend):
 
 ```bash
 source venv/bin/activate
 uvicorn main:app --reload
 ```
 
+The backend defaults to allowing:
+
+- `http://localhost:3000`
+- `https://kbuzzy.github.io`
+
+You can override this with the `ALLOWED_ORIGINS` environment variable.
+
 ### Frontend
 
-From `/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend`:
+From [frontend](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend):
 
 ```bash
 npm install
 npm start
 ```
 
-The frontend defaults to `http://127.0.0.1:8000` for the API.
+The frontend reads its API configuration from [frontend/src/config/schedule.js](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/src/config/schedule.js).
 
-## GitHub Pages Deployment
+## Deployment Notes
 
-This repository is now packaged for GitHub Pages deployment of the React frontend.
+The frontend can be deployed separately from the backend.
 
 Important limitation:
 
-- GitHub Pages can host the frontend only.
-- The FastAPI solver backend cannot run on `github.io`.
-- To make the deployed page generate schedules, you must host the backend elsewhere and provide its URL as `REACT_APP_API_URL` in the GitHub repository's Actions variables.
-
-Prepared deployment pieces:
-
-- [`frontend/package.json`](/Users/kilianburke/Desktop/fellowship-scheduler-clean/frontend/package.json) sets `homepage` to `https://kbuzzy.github.io`
-- [`/.github/workflows/deploy-pages.yml`](/Users/kilianburke/Desktop/fellowship-scheduler-clean/.github/workflows/deploy-pages.yml) builds and deploys the frontend to Pages
-- [`/.gitignore`](/Users/kilianburke/Desktop/fellowship-scheduler-clean/.gitignore) ignores local build and environment artifacts
-
-Suggested repository target:
-
-- `git@github.com:kbuzzy/kbuzzy.github.io.git`
-
-Suggested push flow:
-
-```bash
-git init
-git branch -M main
-git remote add origin git@github.com:kbuzzy/kbuzzy.github.io.git
-git add .
-git commit -m "Prepare Fellowship Scheduler for GitHub Pages"
-git push -u origin main
-```
-
-After pushing:
-
-1. Create a repository variable named `REACT_APP_API_URL` in GitHub Actions settings if you have a hosted backend.
-2. In the repository's Pages settings, ensure GitHub Actions is the publishing source.
-3. The site will publish at `https://kbuzzy.github.io`.
-
-## Render Backend Setup
-
-This repo now includes Render-ready backend files:
-
-- [`backend/requirements.txt`](/Users/kilianburke/Desktop/fellowship-scheduler-clean/backend/requirements.txt)
-- [`render.yaml`](/Users/kilianburke/Desktop/fellowship-scheduler-clean/render.yaml)
-
-Recommended setup on Render:
-
-1. Push this repository to GitHub.
-2. In Render, create a new Blueprint service from the repo, or create a Python Web Service manually.
-3. If you use the included `render.yaml`, Render will auto-configure:
-   - `rootDir`: `backend`
-   - build command: `pip install -r requirements.txt`
-   - start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. After the Render deploy succeeds, copy the backend URL such as `https://fellowship-scheduler-backend.onrender.com`.
-5. In the GitHub repo for the frontend, set the Actions variable `REACT_APP_API_URL` to that Render backend URL.
-
-The backend now reads `ALLOWED_ORIGINS` and defaults to:
-
-- `http://localhost:3000`
-- `https://kbuzzy.github.io`
-
-If you later use a custom frontend domain, add it to the Render `ALLOWED_ORIGINS` environment variable.
+- GitHub Pages can host the React frontend only.
+- The FastAPI scheduling backend must run on a separate host such as Render.
