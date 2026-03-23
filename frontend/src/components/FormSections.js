@@ -634,7 +634,7 @@ export function TestResultPanel({ result }) {
   );
 }
 
-export function LoadingPanel({ loading, mode }) {
+export function LoadingPanel({ loading, mode, onCancel }) {
   if (!loading) return null;
 
   const attemptSuffix = mode.attempt && mode.totalAttempts > 1
@@ -668,7 +668,21 @@ export function LoadingPanel({ loading, mode }) {
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ fontWeight: 700, color: "#0b5ed7" }}>{label}{attemptSuffix}</div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#0b5ed7", letterSpacing: 0.4 }}>IN PROGRESS</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#0b5ed7", letterSpacing: 0.4 }}>IN PROGRESS</div>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              ...dangerButtonStyle,
+              padding: "6px 10px",
+              fontSize: 12,
+              borderRadius: 999,
+            }}
+          >
+            Stop
+          </button>
+        </div>
       </div>
       <div
         style={{

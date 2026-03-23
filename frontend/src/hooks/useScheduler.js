@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import moment from "moment";
 
 import {
@@ -95,6 +95,7 @@ export function useScheduler() {
   const [backendChecking, setBackendChecking] = useState(Boolean(API_URL));
   const [retryUntilValid, setRetryUntilValid] = useState(storedState?.retryUntilValid || false);
   const [maxRetryAttempts, setMaxRetryAttempts] = useState(storedState?.maxRetryAttempts || DEFAULT_RETRY_MAX_ATTEMPTS);
+  const activeRequestControllerRef = useRef(null);
 
   const months = useMemo(() => listMonths(start, end), [start, end]);
   const apiConfigured = Boolean(API_URL);
@@ -236,11 +237,12 @@ export function useScheduler() {
     };
   }, [end, majorHolidayBlocks, roster, start]);
 
-  const requestSchedule = useCallback(async (payload) => {
+  const requestSchedule = useCallback(async (payload, signal) => {
     const response = await fetch(`${API_URL}/schedule`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal,
     });
     setBackendStatus("connected");
 
@@ -264,8 +266,12 @@ export function useScheduler() {
 
     const totalAttempts = allowRetryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1;
     let lastAttempt = null;
+    const signal = activeRequestControllerRef.current?.signal;
 
     for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+      if (signal?.aborted) {
+        throw new DOMException("Scheduling request canceled.", "AbortError");
+      }
       setLoadingMode({ kind, attempt, totalAttempts });
       const payload = buildSchedulePayload({
         vacationsById,
@@ -275,7 +281,7 @@ export function useScheduler() {
         selectedExceptionMonths,
         solverSeed: Math.floor(Math.random() * 1_000_000_000),
       });
-      const data = await requestSchedule(payload);
+      const data = await requestSchedule(payload, signal);
       const nextValidation = getValidationForResult(data, start, end, selectedExceptionMonths, roster);
       const validationPassed = nextValidation.every((check) => check.ok);
       lastAttempt = { data, nextValidation, validationPassed, attempt, totalAttempts };
@@ -294,7 +300,16 @@ export function useScheduler() {
     setValidation(nextValidation);
   }, [start]);
 
+  const cancelInProgress = useCallback(() => {
+    activeRequestControllerRef.current?.abort();
+    activeRequestControllerRef.current = null;
+    setLoading(false);
+    setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: 1 });
+    setError("Scheduling request canceled.");
+  }, []);
+
   const generateSchedule = useCallback(async () => {
+    activeRequestControllerRef.current = new AbortController();
     setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
     setError(null);
@@ -333,11 +348,15 @@ export function useScheduler() {
         setError(`No fully valid schedule was found after ${result.totalAttempts} attempt${result.totalAttempts === 1 ? "" : "s"}. The closest attempt is shown so you can review the remaining conflicts.`);
       }
     } catch (err) {
+      if (err?.name === "AbortError") {
+        return;
+      }
       if (err instanceof TypeError) {
         setBackendStatus("error");
       }
       setError(err.message || "Unknown error");
     } finally {
+      activeRequestControllerRef.current = null;
       setLoading(false);
     }
   }, [
@@ -397,6 +416,7 @@ export function useScheduler() {
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
 
+    activeRequestControllerRef.current = new AbortController();
     setLoadingMode({ kind: "randomTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
     setError(null);
@@ -436,6 +456,15 @@ export function useScheduler() {
         "Random scheduling request completed",
       ));
     } catch (err) {
+      if (err?.name === "AbortError") {
+        setTestResult({
+          ok: false,
+          title: "Run Random Test",
+          message: "Random test was canceled.",
+          details: [],
+        });
+        return;
+      }
       if (err instanceof TypeError) {
         setBackendStatus("error");
       }
@@ -447,6 +476,7 @@ export function useScheduler() {
         details: [err.message || "Unknown error"],
       });
     } finally {
+      activeRequestControllerRef.current = null;
       setLoading(false);
     }
   }, [apiConfigured, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, retryUntilValid, roster, solveWithRetries, start]);
@@ -454,6 +484,7 @@ export function useScheduler() {
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
 
+    activeRequestControllerRef.current = new AbortController();
     setLoadingMode({ kind: "typicalTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
     setLoading(true);
     setError(null);
@@ -501,6 +532,15 @@ export function useScheduler() {
       );
       setTestResult(nextResult);
     } catch (err) {
+      if (err?.name === "AbortError") {
+        setTestResult({
+          ok: false,
+          title: "Run Typical Schedule Test",
+          message: "Typical test was canceled.",
+          details: [],
+        });
+        return;
+      }
       if (err instanceof TypeError) {
         setBackendStatus("error");
       }
@@ -512,6 +552,7 @@ export function useScheduler() {
         details: [err.message || "Unknown error"],
       });
     } finally {
+      activeRequestControllerRef.current = null;
       setLoading(false);
     }
   }, [apiConfigured, end, finalizeTestResult, majorHolidayBlocks, retryUntilValid, roster, solveWithRetries, start, maxRetryAttempts]);
@@ -564,6 +605,7 @@ export function useScheduler() {
     backendStatus,
     boardExamIds,
     calendarDate,
+    cancelInProgress,
     callAvoidRequests,
     checkBackend,
     end,

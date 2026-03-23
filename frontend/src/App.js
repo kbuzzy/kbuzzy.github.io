@@ -50,6 +50,7 @@ export default function App() {
     backendStatus,
     boardExamIds,
     calendarDate,
+    cancelInProgress,
     callAvoidRequests,
     checkBackend,
     end,
@@ -218,7 +219,7 @@ export default function App() {
         ))}
       </div>
 
-      <LoadingPanel loading={loading} mode={loadingMode} />
+      <LoadingPanel loading={loading} mode={loadingMode} onCancel={cancelInProgress} />
 
       {activeTab === "scheduler" ? (
         <>
