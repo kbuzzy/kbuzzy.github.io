@@ -11,6 +11,8 @@ MONTH_KEYS = build_month_keys(CURRENT_ACADEMIC_YEAR_CONFIG["start_year"])
 DEFAULT_EXCEPTION_TUESDAY_MONTHS = default_exception_tuesday_months(CURRENT_ACADEMIC_YEAR_CONFIG["start_year"])
 ROTATIONS = ["consult", "imaging", "research", "cath", "achd_ep", "pcicu"]
 PGY_WEEKEND_TARGETS = {"PGY-4": 12, "PGY-5": 9, "PGY-6": 5}
+IN_HOUSE_TARGET_MIN = 19
+IN_HOUSE_TARGET_MAX = 22
 PGY_ROTATION_TARGETS = {
     "PGY-4": {"consult": 3, "pcicu": 1, "cath": 4, "imaging": 3, "research": 1, "achd_ep": 0},
     "PGY-5": {"consult": 2, "pcicu": 1, "cath": 1, "imaging": 3, "research": 4, "achd_ep": 1},

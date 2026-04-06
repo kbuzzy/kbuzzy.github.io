@@ -8,6 +8,8 @@ from .constants import (
     CATH_THURSDAY_WEIGHT,
     DIFFICULT_ROTATION_STREAK_WEIGHT,
     HOLIDAY_WEEKENDS,
+    IN_HOUSE_TARGET_MAX,
+    IN_HOUSE_TARGET_MIN,
     MAX_SOLVER_SECONDS,
     OCTOBER_BOARD_WEIGHT,
     PGY_PREFERENCE_WEIGHTS,
@@ -209,6 +211,15 @@ def generate_schedule(
 
         for fellow_idx in range(fellow_count):
             model.add(call[(fellow_idx, day_idx)] + call[(fellow_idx, next_day)] <= 1)
+
+    ordered_in_house_days = sorted(in_house_days)
+    in_house_counts = [
+        sum(call[(fellow_idx, day_idx)] for day_idx in ordered_in_house_days)
+        for fellow_idx in range(fellow_count)
+    ]
+    for total in in_house_counts:
+        model.add(total >= IN_HOUSE_TARGET_MIN)
+        model.add(total <= IN_HOUSE_TARGET_MAX)
 
     for fellow_idx, fellow in enumerate(fellows):
         target = PGY_WEEKEND_TARGETS[pgy_years[fellow]]

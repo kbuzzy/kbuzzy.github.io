@@ -1,7 +1,14 @@
 from datetime import datetime, timedelta
 
 from .academic_year import august_month_key, february_month_key, first_month_key
-from .constants import DEFAULT_CONFERENCE_BLOCKS, DEFAULT_MAJOR_HOLIDAYS, HOLIDAY_WEEKENDS, PGY_ROTATION_TARGETS
+from .constants import (
+    DEFAULT_CONFERENCE_BLOCKS,
+    DEFAULT_MAJOR_HOLIDAYS,
+    HOLIDAY_WEEKENDS,
+    IN_HOUSE_TARGET_MAX,
+    IN_HOUSE_TARGET_MIN,
+    PGY_ROTATION_TARGETS,
+)
 
 DATE_FMT = "%m/%d/%Y"
 
@@ -70,6 +77,7 @@ def build_validation(
     chop_call_errors = []
     august_rotation_errors = []
     february_rotation_errors = []
+    in_house_count_errors = []
     holiday_counts: dict[str, int] = {}
     major_holiday_counts: dict[str, int] = {}
 
@@ -298,6 +306,21 @@ def build_validation(
     for item in major_holidays:
         major_holiday_counts[item["fellow"]] = major_holiday_counts.get(item["fellow"], 0) + 1
 
+    in_house_counts = {fellow: 0 for fellow in fellows}
+    for item in schedule:
+        date = _parse_display(item["date"])
+        date_str = item["date"]
+        if date_str in holiday_covered_dates:
+            continue
+        month = date.strftime("%Y-%m")
+        if date.weekday() == 1 and month not in exception_month_set:
+            in_house_counts[item["fellow"]] = in_house_counts.get(item["fellow"], 0) + 1
+        elif date.weekday() in (2, 3):
+            in_house_counts[item["fellow"]] = in_house_counts.get(item["fellow"], 0) + 1
+    for fellow, total in in_house_counts.items():
+        if total < IN_HOUSE_TARGET_MIN or total > IN_HOUSE_TARGET_MAX:
+            in_house_count_errors.append(f"{fellow} has {total} in-house calls")
+
     major_holiday_coverage_counts = {holiday: 0 for holiday in DEFAULT_MAJOR_HOLIDAYS}
     for item in major_holidays:
         major_holiday_coverage_counts[item["holiday"]] = major_holiday_coverage_counts.get(item["holiday"], 0) + 1
@@ -401,6 +424,12 @@ def build_validation(
             "label": "Thursday to weekend",
             "detail": "No Thursday call fellow also takes the following weekend block, including holiday weekends." if not thursday_weekend_errors else " | ".join(thursday_weekend_errors[:3]),
             "suggestion": "" if not thursday_weekend_errors else "Reassign the Thursday call or the following weekend block to a different fellow.",
+        },
+        {
+            "ok": len(in_house_count_errors) == 0,
+            "label": "In-house call target range",
+            "detail": f"Every fellow stays within the required {IN_HOUSE_TARGET_MIN}-{IN_HOUSE_TARGET_MAX} in-house call range." if not in_house_count_errors else " | ".join(in_house_count_errors[:3]),
+            "suggestion": "" if not in_house_count_errors else "Regenerate or adjust other schedule constraints until every fellow lands within the required in-house target range.",
         },
         {
             "ok": True,
