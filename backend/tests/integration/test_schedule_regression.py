@@ -59,6 +59,7 @@ class ScheduleRegressionTests(unittest.TestCase):
             board_exam_fellows=BOARD_EXAM_FELLOWS,
             holiday_preferences=HOLIDAY_PREFERENCES,
             major_holiday_blocks=MAJOR_HOLIDAY_BLOCKS,
+            conference_blocks=None,
             pcicu_exception_months=EXCEPTION_MONTHS,
             solver_seed=7,
         )
@@ -68,6 +69,10 @@ class ScheduleRegressionTests(unittest.TestCase):
         self.assertTrue(check_by_label(checks, "Consult Mondays")["ok"])
         self.assertTrue(check_by_label(checks, "Weekend blocks")["ok"])
         self.assertTrue(check_by_label(checks, "Consecutive call days")["ok"])
+        self.assertTrue(check_by_label(checks, "August Heart Camp rotation limits")["ok"])
+        self.assertTrue(check_by_label(checks, "February CHOP Conference rotation limits")["ok"])
+        self.assertTrue(check_by_label(checks, "Heart Camp call blackout")["ok"])
+        self.assertTrue(check_by_label(checks, "CHOP Conference call blackout")["ok"])
 
     def test_validation_detects_modified_consult_monday_on_real_schedule(self):
         mutated_schedule = copy.deepcopy(self.result["schedule"])
@@ -116,6 +121,7 @@ class ScheduleRegressionTests(unittest.TestCase):
             board_exam_fellows=BOARD_EXAM_FELLOWS,
             holiday_preferences=HOLIDAY_PREFERENCES,
             major_holiday_blocks=MAJOR_HOLIDAY_BLOCKS,
+            conference_blocks=None,
             pcicu_exception_months=EXCEPTION_MONTHS,
             solver_seed=7,
         )

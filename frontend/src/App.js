@@ -8,6 +8,7 @@ import {
   BoardExamEditor,
   CallAvoidRequestEditor,
   CollapsibleSection,
+  ConferenceBlockEditor,
   HolidayPreferenceEditor,
   LoadingPanel,
   MajorHolidayBlockEditor,
@@ -53,6 +54,7 @@ export default function App() {
     cancelInProgress,
     callAvoidRequests,
     checkBackend,
+    conferenceBlocks,
     end,
     error,
     events,
@@ -67,6 +69,7 @@ export default function App() {
     maxRetryAttempts,
     months,
     pcicuExceptionMonths,
+    requestSummary,
     retryUntilValid,
     roster,
     resetSavedState,
@@ -78,6 +81,7 @@ export default function App() {
     setBoardExamIds,
     setCalendarDate,
     setCallAvoidRequests,
+    setConferenceBlocks,
     setEnd,
     setHolidayPreferences,
     setMajorHolidayBlocks,
@@ -105,6 +109,7 @@ export default function App() {
   const boardExamCount = boardExamIds.length;
   const exceptionMonthSummary = `${pcicuExceptionMonths.length}/6 selected`;
   const holidayBlockSummary = `${Object.values(majorHolidayBlocks).flat().length} date ranges`;
+  const conferenceSummary = `${Object.values(conferenceBlocks).filter((block) => block?.start && block?.end).length} ranges`;
   const holidayPreferenceSummary = `${roster.length} fellows ranked`;
   const inHouseCountSummary = `${roster.length} fellows`;
   const rotationSummary = `${months.length} months`;
@@ -293,7 +298,7 @@ export default function App() {
               <div style={{ background: "#fff", border: "1px solid #d8dee6", borderRadius: 8, padding: 14 }}>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>Exams And Monthly Exceptions</div>
                 <div style={{ fontSize: 12, color: "#667085", marginBottom: 10 }}>
-                  Board exams: {boardExamCount}. PICU exception months: {exceptionMonthSummary}.
+                  Board exams: {boardExamCount}. PICU exception months: {exceptionMonthSummary}. Conference ranges: {conferenceSummary}.
                 </div>
                 <div style={{ maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
                   <BoardExamEditor
@@ -314,6 +319,11 @@ export default function App() {
                           : [...current, monthKey].sort()
                       ))
                     }
+                  />
+
+                  <ConferenceBlockEditor
+                    blocks={conferenceBlocks}
+                    onChange={setConferenceBlocks}
                   />
                 </div>
               </div>
@@ -503,7 +513,7 @@ export default function App() {
           </>
         )
       ) : (
-        <RulesValidationTab checks={validation} error={error} />
+        <RulesValidationTab checks={validation} error={error} requestSummary={requestSummary} />
       )}
       {showScrollTop && (
         <button

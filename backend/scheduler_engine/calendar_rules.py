@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from .academic_year import academic_year_start_year, build_month_keys, default_exception_tuesday_months
 from .constants import (
+    DEFAULT_CONFERENCE_BLOCKS,
     DEFAULT_MAJOR_HOLIDAYS,
     HOLIDAY_WEEKENDS,
     PGY_ROTATION_TARGETS,
@@ -54,6 +55,31 @@ def normalize_major_holidays(major_holiday_blocks: dict | None) -> dict[str, lis
     return normalized
 
 
+def normalize_conference_blocks(conference_blocks: dict | None) -> dict[str, dict[str, str]]:
+    configured = conference_blocks or DEFAULT_CONFERENCE_BLOCKS
+    expected = set(DEFAULT_CONFERENCE_BLOCKS)
+    if set(configured) != expected:
+        raise ValueError("conference_blocks must include heart_camp and chop_conference")
+
+    normalized: dict[str, dict[str, str]] = {}
+    for key, default_block in DEFAULT_CONFERENCE_BLOCKS.items():
+        block = configured.get(key, {})
+        start = block.get("start")
+        end = block.get("end")
+        if not start or not end:
+            raise ValueError(f"{default_block['label']} must include start and end dates")
+        start_dt = parse_iso(start)
+        end_dt = parse_iso(end)
+        if end_dt < start_dt:
+            raise ValueError(f"{default_block['label']} end must be on or after the start date")
+        normalized[key] = {
+            "label": default_block["label"],
+            "start": start_dt.strftime("%Y-%m-%d"),
+            "end": end_dt.strftime("%Y-%m-%d"),
+        }
+    return normalized
+
+
 def validate_schedule_inputs(
     fellows: list[str],
     start_date: datetime,
@@ -61,8 +87,9 @@ def validate_schedule_inputs(
     pgy_years: dict[str, str],
     holiday_preferences: dict[str, dict[str, list[str]]],
     major_holiday_blocks: dict | None,
+    conference_blocks: dict | None,
     pcicu_exception_months: list[str],
-) -> tuple[dict[str, list[dict[str, str]]], set[str]]:
+) -> tuple[dict[str, list[dict[str, str]]], dict[str, dict[str, str]], set[str]]:
     if len(fellows) != 6:
         raise ValueError("the schedule must include exactly 6 fellows")
     start_year = academic_year_start_year(start_date, end_date)
@@ -88,6 +115,16 @@ def validate_schedule_inputs(
             raise ValueError("the roster must include exactly two fellows in each of PGY-4, PGY-5, and PGY-6")
 
     major_holidays = normalize_major_holidays(major_holiday_blocks)
+    conference_windows = normalize_conference_blocks(conference_blocks)
+    heart_camp_start = parse_iso(conference_windows["heart_camp"]["start"])
+    heart_camp_end = parse_iso(conference_windows["heart_camp"]["end"])
+    chop_start = parse_iso(conference_windows["chop_conference"]["start"])
+    chop_end = parse_iso(conference_windows["chop_conference"]["end"])
+    if heart_camp_start.strftime("%Y-%m") != f"{start_year}-08" or heart_camp_end.strftime("%Y-%m") != f"{start_year}-08":
+        raise ValueError("Heart Camp dates must fall within August of the academic year")
+    if chop_start.strftime("%Y-%m") != f"{start_year + 1}-02" or chop_end.strftime("%Y-%m") != f"{start_year + 1}-02":
+        raise ValueError("CHOP Conference dates must fall within February of the academic year")
+
     expected_major = set(major_holidays)
     expected_weekends = {info["label"] for info in HOLIDAY_WEEKENDS.values()}
     for fellow in fellows:
@@ -101,7 +138,7 @@ def validate_schedule_inputs(
         if set(weekend_list) != expected_weekends or len(weekend_list) != len(expected_weekends):
             raise ValueError(f"{fellow} must rank each holiday weekend exactly once")
 
-    return major_holidays, exception_tuesday_months
+    return major_holidays, conference_windows, exception_tuesday_months
 
 
 def build_call_blocks(start_date: datetime, end_date: datetime, major_holidays: dict[str, list[dict[str, str]]]) -> dict:

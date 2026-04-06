@@ -31,18 +31,20 @@ def generate_schedule(
     board_exam_fellows: list[str],
     holiday_preferences: dict[str, dict[str, list[str]]],
     major_holiday_blocks: dict | None,
+    conference_blocks: dict | None,
     pcicu_exception_months: list[str],
     solver_seed: int | None = None,
 ) -> dict:
     del holidays
 
-    major_holidays, exception_tuesday_months = validate_schedule_inputs(
+    major_holidays, conference_windows, exception_tuesday_months = validate_schedule_inputs(
         fellows,
         start_date,
         end_date,
         pgy_years,
         holiday_preferences,
         major_holiday_blocks,
+        conference_blocks,
         pcicu_exception_months,
     )
 
@@ -116,6 +118,26 @@ def generate_schedule(
             date_idx = idx(vac_date, start_date)
             if 0 <= date_idx < days:
                 model.add(call[(fellow_idx, date_idx)] == 0)
+
+    heart_camp_start = parse_iso(conference_windows["heart_camp"]["start"])
+    heart_camp_end = parse_iso(conference_windows["heart_camp"]["end"])
+    chop_start = parse_iso(conference_windows["chop_conference"]["start"])
+    chop_end = parse_iso(conference_windows["chop_conference"]["end"])
+    for fellow_idx, fellow in enumerate(fellows):
+        if pgy_years[fellow] == "PGY-6":
+            current = heart_camp_start
+            while current <= heart_camp_end:
+                date_idx = idx(current, start_date)
+                if 0 <= date_idx < days:
+                    model.add(call[(fellow_idx, date_idx)] == 0)
+                current += timedelta(days=1)
+        if pgy_years[fellow] == "PGY-4":
+            current = chop_start
+            while current <= chop_end:
+                date_idx = idx(current, start_date)
+                if 0 <= date_idx < days:
+                    model.add(call[(fellow_idx, date_idx)] == 0)
+                current += timedelta(days=1)
 
     for day_idx in range(days):
         if day_idx in covered_block_days and day_idx not in block_starts:
@@ -324,5 +346,6 @@ def generate_schedule(
         pgy_years=pgy_years,
         month_keys=month_keys,
         start_year=start_year,
+        conference_blocks=conference_windows,
     )
     return result

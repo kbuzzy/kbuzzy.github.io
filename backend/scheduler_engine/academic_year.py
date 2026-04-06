@@ -32,3 +32,11 @@ def first_month_key(start_year: int) -> str:
 
 def october_month_key(start_year: int) -> str:
     return f"{start_year}-10"
+
+
+def august_month_key(start_year: int) -> str:
+    return f"{start_year}-08"
+
+
+def february_month_key(start_year: int) -> str:
+    return f"{start_year + 1}-02"

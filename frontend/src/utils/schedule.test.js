@@ -4,8 +4,10 @@ import {
   DEFAULT_ACADEMIC_YEAR_START,
 } from "../config/schedule";
 import {
+  buildRequestSummary,
   buildCalendarEvents,
   createDefaultMajorHolidayBlocks,
+  createDefaultConferenceBlocks,
   createTypicalVacations,
   createTestCallAvoidRequests,
   expandDateRanges,
@@ -95,5 +97,63 @@ describe("createTestCallAvoidRequests", () => {
     } finally {
       randomSpy.mockRestore();
     }
+  });
+});
+
+describe("buildRequestSummary", () => {
+  test("reports satisfied and unmet requests with explanations", () => {
+    const summary = buildRequestSummary({
+      start: DEFAULT_WINDOW.start,
+      roster: INITIAL_ROSTER,
+      vacations: {
+        f1: [{ from: "07/06/2026", to: "07/10/2026" }],
+        f2: [],
+        f3: [],
+        f4: [],
+        f5: [],
+        f6: [],
+      },
+      callAvoidRequests: {
+        f1: [{ from: "07/13/2026", to: "07/13/2026" }],
+        f2: [],
+        f3: [],
+        f4: [],
+        f5: [],
+        f6: [],
+      },
+      boardExamIds: ["f1"],
+      holidayPreferences: {
+        f1: {
+          majorHolidays: ["Thanksgiving", "Christmas", "New Year's"],
+          holidayWeekends: ["Labor Day", "July 4", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"],
+        },
+        f2: { majorHolidays: ["Thanksgiving", "Christmas", "New Year's"], holidayWeekends: ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"] },
+        f3: { majorHolidays: ["Thanksgiving", "Christmas", "New Year's"], holidayWeekends: ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"] },
+        f4: { majorHolidays: ["Thanksgiving", "Christmas", "New Year's"], holidayWeekends: ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"] },
+        f5: { majorHolidays: ["Thanksgiving", "Christmas", "New Year's"], holidayWeekends: ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"] },
+        f6: { majorHolidays: ["Thanksgiving", "Christmas", "New Year's"], holidayWeekends: ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"] },
+      },
+      conferenceBlocks: createDefaultConferenceBlocks(),
+      schedule: [
+        { date: "07/13/2026", fellow: "Deepthi" },
+      ],
+      rotations: [
+        { month: "2026-10", fellow: "Deepthi", rotation: "consult" },
+        { month: "2026-08", fellow: "Jordan", rotation: "research" },
+        { month: "2027-02", fellow: "Deepthi", rotation: "imaging" },
+      ],
+      holidayWeekends: [
+        { label: "July 4", fellow: "Deepthi" },
+      ],
+      majorHolidays: [
+        { holiday: "Christmas", fellow: "Deepthi" },
+      ],
+    });
+
+    const deepthi = summary.find((item) => item.fellow === "Deepthi");
+    expect(deepthi.satisfied.some((item) => item.includes("Vacation week 1"))).toBe(true);
+    expect(deepthi.unmet.some((item) => item.label.includes("Call-avoid request 1"))).toBe(true);
+    expect(deepthi.unmet.some((item) => item.label.includes("October board-exam request"))).toBe(true);
+    expect(deepthi.unmet.some((item) => item.label.includes("Holiday weekend preference"))).toBe(true);
   });
 });

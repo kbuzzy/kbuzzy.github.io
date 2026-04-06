@@ -87,6 +87,83 @@ export function PcicuExceptionMonthEditor({ months, selectedMonths, onToggle }) 
   );
 }
 
+export function ConferenceBlockEditor({ blocks, onChange }) {
+  const items = [
+    {
+      key: "heartCamp",
+      title: "Heart Camp",
+      detail: "Third-year fellows cannot be on call during this range and cannot take consult, cath, or PCICU in August.",
+    },
+    {
+      key: "chopConference",
+      title: "CHOP Conference",
+      detail: "First-year fellows cannot be on call during this range and cannot take consult, cath, or PCICU in February.",
+    },
+  ];
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={labelStyle}>
+        Conference Coverage Dates
+        <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
+          These are hard scheduling blackout ranges for the affected PGY groups.
+        </span>
+      </label>
+      <div style={{ display: "grid", gap: 10 }}>
+        {items.map((item) => {
+          const block = blocks[item.key];
+          return (
+            <div
+              key={item.key}
+              style={{
+                background: "#fff",
+                border: "1px solid #e0e0e0",
+                borderRadius: 6,
+                padding: 12,
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.title}</div>
+              <div style={{ fontSize: 12, color: "#667085", marginBottom: 8 }}>{item.detail}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  type="date"
+                  value={block?.start ? moment(block.start, DATE_FMT).format("YYYY-MM-DD") : ""}
+                  onChange={(e) => {
+                    const raw = e.target.value ? moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT) : "";
+                    onChange({
+                      ...blocks,
+                      [item.key]: {
+                        ...block,
+                        start: raw,
+                      },
+                    });
+                  }}
+                  style={inputStyle}
+                />
+                <input
+                  type="date"
+                  value={block?.end ? moment(block.end, DATE_FMT).format("YYYY-MM-DD") : ""}
+                  onChange={(e) => {
+                    const raw = e.target.value ? moment(e.target.value, "YYYY-MM-DD").format(DATE_FMT) : "";
+                    onChange({
+                      ...blocks,
+                      [item.key]: {
+                        ...block,
+                        end: raw,
+                      },
+                    });
+                  }}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function BackendStatusBadge({ status, checking, apiUrl, onRetry }) {
   const statusStyles = {
     connected: {

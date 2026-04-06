@@ -13,7 +13,7 @@ from scheduler_engine.calendar_rules import build_call_blocks, normalize_major_h
 
 class CalendarRulesTests(unittest.TestCase):
     def test_validate_schedule_inputs_uses_default_exception_months(self):
-        major_holidays, exception_months = validate_schedule_inputs(
+        major_holidays, _, exception_months = validate_schedule_inputs(
             fellows=["A", "B", "C", "D", "E", "F"],
             start_date=datetime.strptime("07/01/2026", "%m/%d/%Y"),
             end_date=datetime.strptime("06/30/2027", "%m/%d/%Y"),
@@ -33,6 +33,7 @@ class CalendarRulesTests(unittest.TestCase):
                 for fellow in ["A", "B", "C", "D", "E", "F"]
             },
             major_holiday_blocks=None,
+            conference_blocks=None,
             pcicu_exception_months=[],
         )
 
@@ -67,6 +68,7 @@ class CalendarRulesTests(unittest.TestCase):
                     },
                 },
                 major_holiday_blocks=None,
+                conference_blocks=None,
                 pcicu_exception_months=[],
             )
 
@@ -94,6 +96,7 @@ class CalendarRulesTests(unittest.TestCase):
                     for fellow in ["A", "B", "C", "D", "E", "F"]
                 },
                 major_holiday_blocks=None,
+                conference_blocks=None,
                 pcicu_exception_months=[],
             )[0],
         )
@@ -123,6 +126,64 @@ class CalendarRulesTests(unittest.TestCase):
                 datetime.strptime("07/01/2026", "%m/%d/%Y"),
                 datetime.strptime("06/30/2027", "%m/%d/%Y"),
                 normalize_major_holidays(overlapping_blocks),
+            )
+
+    def test_validate_schedule_inputs_rejects_heart_camp_outside_august(self):
+        with self.assertRaises(ValueError):
+            validate_schedule_inputs(
+                fellows=["A", "B", "C", "D", "E", "F"],
+                start_date=datetime.strptime("07/01/2026", "%m/%d/%Y"),
+                end_date=datetime.strptime("06/30/2027", "%m/%d/%Y"),
+                pgy_years={
+                    "A": "PGY-4",
+                    "B": "PGY-4",
+                    "C": "PGY-5",
+                    "D": "PGY-5",
+                    "E": "PGY-6",
+                    "F": "PGY-6",
+                },
+                holiday_preferences={
+                    fellow: {
+                        "majorHolidays": ["Thanksgiving", "Christmas", "New Year's"],
+                        "holidayWeekends": ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"],
+                    }
+                    for fellow in ["A", "B", "C", "D", "E", "F"]
+                },
+                major_holiday_blocks=None,
+                conference_blocks={
+                    "heart_camp": {"start": "2026-09-01", "end": "2026-09-06"},
+                    "chop_conference": {"start": "2027-02-03", "end": "2027-02-07"},
+                },
+                pcicu_exception_months=[],
+            )
+
+    def test_validate_schedule_inputs_rejects_chop_conference_outside_february(self):
+        with self.assertRaises(ValueError):
+            validate_schedule_inputs(
+                fellows=["A", "B", "C", "D", "E", "F"],
+                start_date=datetime.strptime("07/01/2026", "%m/%d/%Y"),
+                end_date=datetime.strptime("06/30/2027", "%m/%d/%Y"),
+                pgy_years={
+                    "A": "PGY-4",
+                    "B": "PGY-4",
+                    "C": "PGY-5",
+                    "D": "PGY-5",
+                    "E": "PGY-6",
+                    "F": "PGY-6",
+                },
+                holiday_preferences={
+                    fellow: {
+                        "majorHolidays": ["Thanksgiving", "Christmas", "New Year's"],
+                        "holidayWeekends": ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"],
+                    }
+                    for fellow in ["A", "B", "C", "D", "E", "F"]
+                },
+                major_holiday_blocks=None,
+                conference_blocks={
+                    "heart_camp": {"start": "2026-08-21", "end": "2026-08-26"},
+                    "chop_conference": {"start": "2027-03-03", "end": "2027-03-07"},
+                },
+                pcicu_exception_months=[],
             )
 
 

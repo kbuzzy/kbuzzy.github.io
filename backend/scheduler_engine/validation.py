@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
-from .academic_year import first_month_key
-from .constants import DEFAULT_MAJOR_HOLIDAYS, HOLIDAY_WEEKENDS, PGY_ROTATION_TARGETS
+from .academic_year import august_month_key, february_month_key, first_month_key
+from .constants import DEFAULT_CONFERENCE_BLOCKS, DEFAULT_MAJOR_HOLIDAYS, HOLIDAY_WEEKENDS, PGY_ROTATION_TARGETS
 
 DATE_FMT = "%m/%d/%Y"
 
@@ -22,6 +22,7 @@ def build_validation(
     pgy_years: dict[str, str],
     month_keys: list[str],
     start_year: int,
+    conference_blocks: dict[str, dict[str, str]] | None = None,
 ) -> list[dict]:
     if not schedule:
         return []
@@ -65,8 +66,18 @@ def build_validation(
     consecutive_call_errors = []
     thursday_weekend_errors = []
     cath_thursday_matches = []
+    heart_camp_call_errors = []
+    chop_call_errors = []
+    august_rotation_errors = []
+    february_rotation_errors = []
     holiday_counts: dict[str, int] = {}
     major_holiday_counts: dict[str, int] = {}
+
+    conference_windows = conference_blocks or DEFAULT_CONFERENCE_BLOCKS
+    heart_camp_start = datetime.strptime(conference_windows["heart_camp"]["start"], "%Y-%m-%d")
+    heart_camp_end = datetime.strptime(conference_windows["heart_camp"]["end"], "%Y-%m-%d")
+    chop_start = datetime.strptime(conference_windows["chop_conference"]["start"], "%Y-%m-%d")
+    chop_end = datetime.strptime(conference_windows["chop_conference"]["end"], "%Y-%m-%d")
 
     exception_month_set = set(exception_months)
     holiday_start_map = {item["start"]: item for item in holiday_weekends}
@@ -105,6 +116,10 @@ def build_validation(
                 counts[rotation_name] = counts.get(rotation_name, 0) + 1
             if month == first_month_key(start_year) and pgy_years.get(fellow) == "PGY-4" and rotation_name != "imaging":
                 july_imaging_errors.append(f"{fellow} should be on imaging in {first_month_key(start_year)}, got {rotation_name or 'none'}")
+            if pgy_years.get(fellow) == "PGY-6" and month == august_month_key(start_year) and rotation_name in {"consult", "cath", "pcicu"}:
+                august_rotation_errors.append(f"{fellow} is assigned to {rotation_name} in {month}")
+            if pgy_years.get(fellow) == "PGY-4" and month == february_month_key(start_year) and rotation_name in {"consult", "cath", "pcicu"}:
+                february_rotation_errors.append(f"{fellow} is assigned to {rotation_name} in {month}")
 
         fellow_pgy = pgy_years.get(fellow)
         if fellow_pgy in PGY_ROTATION_TARGETS:
@@ -172,6 +187,16 @@ def build_validation(
         "label": "Consecutive non-research rotations",
         "detail": "No fellow repeats a non-research rotation in back-to-back months." if not consecutive_rotation_errors else " | ".join(consecutive_rotation_errors[:3]),
     })
+    checks.append({
+        "ok": len(august_rotation_errors) == 0,
+        "label": "August Heart Camp rotation limits",
+        "detail": "Third-year fellows avoid consult, cath, and PCICU in August." if not august_rotation_errors else " | ".join(august_rotation_errors[:3]),
+    })
+    checks.append({
+        "ok": len(february_rotation_errors) == 0,
+        "label": "February CHOP Conference rotation limits",
+        "detail": "First-year fellows avoid consult, cath, and PCICU in February." if not february_rotation_errors else " | ".join(february_rotation_errors[:3]),
+    })
 
     current = start_date
     while current <= end_date:
@@ -180,6 +205,10 @@ def build_validation(
         assigned = by_date.get(date_str)
         if not assigned:
             missing.append(date_str)
+        if heart_camp_start <= current <= heart_camp_end and assigned and pgy_years.get(assigned) == "PGY-6":
+            heart_camp_call_errors.append(f"{date_str}: {assigned}")
+        if chop_start <= current <= chop_end and assigned and pgy_years.get(assigned) == "PGY-4":
+            chop_call_errors.append(f"{date_str}: {assigned}")
 
         if current.weekday() == 0 and date_str not in holiday_covered_dates and assigned != consult_by_month.get(month):
             monday_errors.append(f"{date_str}: expected {consult_by_month.get(month)}, got {assigned}")
@@ -252,6 +281,17 @@ def build_validation(
                 thursday_weekend_errors.append(f"{date_str}: {thursday_fellow} also took the following weekend")
 
         current += timedelta(days=1)
+
+    checks.append({
+        "ok": len(heart_camp_call_errors) == 0,
+        "label": "Heart Camp call blackout",
+        "detail": "Third-year fellows are protected from call during the Heart Camp dates." if not heart_camp_call_errors else " | ".join(heart_camp_call_errors[:3]),
+    })
+    checks.append({
+        "ok": len(chop_call_errors) == 0,
+        "label": "CHOP Conference call blackout",
+        "detail": "First-year fellows are protected from call during the CHOP Conference dates." if not chop_call_errors else " | ".join(chop_call_errors[:3]),
+    })
 
     for item in holiday_weekends:
         holiday_counts[item["fellow"]] = holiday_counts.get(item["fellow"], 0) + 1

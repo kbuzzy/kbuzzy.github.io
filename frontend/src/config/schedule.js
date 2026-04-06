@@ -9,7 +9,7 @@ export const DATE_FMT = "MM/DD/YYYY";
 export const MAX_VACATION_WEEKS = 4;
 export const MAX_CALL_AVOID_REQUESTS = 8;
 export const STORAGE_KEY = "fellowship-scheduler-state";
-export const STORAGE_VERSION = 2;
+export const STORAGE_VERSION = 3;
 export const DEFAULT_RETRY_MAX_ATTEMPTS = 8;
 export const CURRENT_ACADEMIC_YEAR_CONFIG = {
   startYear: 2026,
@@ -34,6 +34,18 @@ export const CURRENT_ACADEMIC_YEAR_CONFIG = {
       { label: "New Year's A", start: "12/28/2026", end: "12/30/2026" },
       { label: "New Year's B", start: "12/31/2026", end: "01/03/2027" },
     ],
+  },
+  conferenceBlocks: {
+    heartCamp: {
+      label: "Heart Camp",
+      start: "08/21/2026",
+      end: "08/26/2026",
+    },
+    chopConference: {
+      label: "CHOP Conference",
+      start: "02/03/2027",
+      end: "02/07/2027",
+    },
   },
 };
 
@@ -81,6 +93,7 @@ export const HOLIDAY_WEEKENDS = CURRENT_ACADEMIC_YEAR_CONFIG.holidayWeekends;
 export const MAJOR_HOLIDAYS = ["Thanksgiving", "Christmas", "New Year's"];
 
 export const DEFAULT_MAJOR_HOLIDAY_BLOCKS = CURRENT_ACADEMIC_YEAR_CONFIG.majorHolidayBlocks;
+export const DEFAULT_CONFERENCE_BLOCKS = CURRENT_ACADEMIC_YEAR_CONFIG.conferenceBlocks;
 
 export const HOLIDAY_WEEKEND_OPTIONS = HOLIDAY_WEEKENDS.map((item) => item.label);
 

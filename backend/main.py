@@ -47,6 +47,7 @@ class ScheduleRequest(BaseModel):
     board_exam_fellows: Optional[list[str]] = []
     holiday_preferences: dict[str, dict[str, list[str]]]
     major_holiday_blocks: Optional[dict[str, list[dict[str, str]]]] = None
+    conference_blocks: Optional[dict[str, dict[str, str]]] = None
     pcicu_exception_months: list[str]
     solver_seed: Optional[int] = None
 
@@ -173,6 +174,7 @@ def create_schedule(req: ScheduleRequest) -> dict:
             req.board_exam_fellows,
             req.holiday_preferences,
             req.major_holiday_blocks,
+            req.conference_blocks,
             req.pcicu_exception_months,
             req.solver_seed,
         )

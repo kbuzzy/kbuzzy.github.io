@@ -1,4 +1,4 @@
-from .academic_year import first_month_key
+from .academic_year import august_month_key, february_month_key, first_month_key
 from .constants import DIFFICULT_ROTATIONS, PGY_ROTATION_TARGETS, ROTATIONS
 
 
@@ -34,9 +34,16 @@ def add_rotation_constraints(
             model.add(sum(rotation[(fellow_idx, month_idx, rotation_slot)] for month_idx in range(len(month_keys))) == target)
 
     first_imaging_index = month_index[first_month_key(start_year)]
+    august_index = month_index[august_month_key(start_year)]
+    february_index = month_index[february_month_key(start_year)]
     for fellow_idx, fellow in enumerate(fellows):
         if pgy_years[fellow] == "PGY-4":
             model.add(rotation[(fellow_idx, first_imaging_index, rotation_index["imaging"])] == 1)
+            for blocked_rotation in ("consult", "cath", "pcicu"):
+                model.add(rotation[(fellow_idx, february_index, rotation_index[blocked_rotation])] == 0)
+        if pgy_years[fellow] == "PGY-6":
+            for blocked_rotation in ("consult", "cath", "pcicu"):
+                model.add(rotation[(fellow_idx, august_index, rotation_index[blocked_rotation])] == 0)
 
     for fellow_idx in range(fellow_count):
         for month_idx in range(len(month_keys) - 1):

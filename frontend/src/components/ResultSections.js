@@ -243,7 +243,50 @@ export function ValidationPanel({ checks }) {
   );
 }
 
-export function RulesValidationTab({ checks, error }) {
+export function RequestSummaryPanel({ summary }) {
+  if (!summary?.length) return null;
+  return (
+    <div style={{ marginBottom: 20, border: "1px solid #dee2e6", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+      <div
+        style={{
+          padding: "10px 16px",
+          background: "#eef6ff",
+          color: "#0b5ed7",
+          fontWeight: 700,
+          borderBottom: "1px solid #dee2e6",
+        }}
+      >
+        Request summary
+      </div>
+      <div style={{ padding: 16, display: "grid", gap: 12 }}>
+        {summary.map((item) => (
+          <div key={item.fellowId} style={{ border: "1px solid #e6ebf1", borderRadius: 8, padding: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>
+              {item.fellow} <span style={{ color: "#667085", fontWeight: 500 }}>({item.pgy})</span>
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+              {item.satisfied.map((entry) => (
+                <li key={`ok-${entry}`} style={{ color: "#155724" }}>
+                  Satisfied: {entry}
+                </li>
+              ))}
+              {item.unmet.map((entry) => (
+                <li key={`miss-${entry.label}`} style={{ color: "#8a4b08" }}>
+                  Not satisfied: {entry.label}. {entry.reason}
+                </li>
+              ))}
+              {item.satisfied.length === 0 && item.unmet.length === 0 && (
+                <li style={{ color: "#667085" }}>No specific requests were entered for this fellow.</li>
+              )}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function RulesValidationTab({ checks, error, requestSummary }) {
   const sections = [
     {
       title: "Roster Rules",
@@ -379,6 +422,7 @@ export function RulesValidationTab({ checks, error }) {
         ))}
       </div>
 
+      <RequestSummaryPanel summary={requestSummary} />
       <ValidationPanel checks={checks} />
     </div>
   );

@@ -52,4 +52,16 @@ CURRENT_ACADEMIC_YEAR_CONFIG = {
             {"label": "New Year's B", "start": "2026-12-31", "end": "2027-01-03"},
         ],
     },
+    "conference_blocks": {
+        "heart_camp": {
+            "label": "Heart Camp",
+            "start": "2026-08-21",
+            "end": "2026-08-26",
+        },
+        "chop_conference": {
+            "label": "CHOP Conference",
+            "start": "2027-02-03",
+            "end": "2027-02-07",
+        },
+    },
 }

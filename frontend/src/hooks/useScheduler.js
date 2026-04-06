@@ -14,7 +14,9 @@ import {
 import { exportCalendarWorkbook } from "../utils/exportWorkbook";
 import {
   buildCalendarEvents,
+  buildRequestSummary,
   createDefaultCallAvoidRequests,
+  createDefaultConferenceBlocks,
   createDefaultMajorHolidayBlocks,
   createDefaultPreferenceState,
   createDefaultVacations,
@@ -27,6 +29,7 @@ import {
   randomVacationWeeks,
   readStoredState,
   sample,
+  serializeConferenceBlocks,
   serializeMajorHolidayBlocks,
 } from "../utils/schedule";
 import { buildValidation } from "../utils/validation";
@@ -74,6 +77,9 @@ export function useScheduler() {
   const [holidayPreferences, setHolidayPreferences] = useState(
     storedState?.holidayPreferences || createDefaultPreferenceState,
   );
+  const [conferenceBlocks, setConferenceBlocks] = useState(
+    storedState?.conferenceBlocks || createDefaultConferenceBlocks,
+  );
   const [majorHolidayBlocks, setMajorHolidayBlocks] = useState(
     storedState?.majorHolidayBlocks || createDefaultMajorHolidayBlocks,
   );
@@ -103,6 +109,34 @@ export function useScheduler() {
   const events = useMemo(
     () => buildCalendarEvents(schedule, roster, pcicuExceptionMonths, majorHolidayBlocks),
     [schedule, roster, pcicuExceptionMonths, majorHolidayBlocks],
+  );
+  const requestSummary = useMemo(
+    () => buildRequestSummary({
+      start,
+      roster,
+      vacations,
+      callAvoidRequests,
+      boardExamIds,
+      holidayPreferences,
+      conferenceBlocks,
+      schedule,
+      rotations,
+      holidayWeekends,
+      majorHolidays,
+    }),
+    [
+      start,
+      roster,
+      vacations,
+      callAvoidRequests,
+      boardExamIds,
+      holidayPreferences,
+      conferenceBlocks,
+      schedule,
+      rotations,
+      holidayWeekends,
+      majorHolidays,
+    ],
   );
 
   const checkBackend = useCallback(async () => {
@@ -136,6 +170,7 @@ export function useScheduler() {
         callAvoidRequests,
         boardExamIds,
         holidayPreferences,
+        conferenceBlocks,
         majorHolidayBlocks,
         pcicuExceptionMonths,
         schedule,
@@ -156,10 +191,12 @@ export function useScheduler() {
     end,
     holidayPreferences,
     holidayWeekends,
+    conferenceBlocks,
     majorHolidayBlocks,
     majorHolidays,
     maxRetryAttempts,
     pcicuExceptionMonths,
+    requestSummary,
     retryUntilValid,
     roster,
     rotations,
@@ -233,10 +270,11 @@ export function useScheduler() {
         roster.map((fellow) => [fellow.name.trim(), selectedPreferences[fellow.id]]),
       ),
       major_holiday_blocks: serializeMajorHolidayBlocks(majorHolidayBlocks),
+      conference_blocks: serializeConferenceBlocks(conferenceBlocks),
       pcicu_exception_months: selectedExceptionMonths,
       solver_seed: solverSeed,
     };
-  }, [end, majorHolidayBlocks, roster, start]);
+  }, [conferenceBlocks, end, majorHolidayBlocks, roster, start]);
 
   const requestSchedule = useCallback(async (payload, signal) => {
     const response = await fetch(`${API_URL}/schedule`, {
@@ -604,6 +642,7 @@ export function useScheduler() {
     setCallAvoidRequests(createDefaultCallAvoidRequests());
     setBoardExamIds([]);
     setHolidayPreferences(createDefaultPreferenceState());
+    setConferenceBlocks(createDefaultConferenceBlocks());
     setMajorHolidayBlocks(createDefaultMajorHolidayBlocks());
     setPcicuExceptionMonths(DEFAULT_PCICU_EXCEPTION_MONTHS);
     setSchedule([]);
@@ -631,6 +670,7 @@ export function useScheduler() {
     cancelInProgress,
     callAvoidRequests,
     checkBackend,
+    conferenceBlocks,
     end,
     error,
     events,
@@ -656,6 +696,7 @@ export function useScheduler() {
     setBoardExamIds,
     setCalendarDate,
     setCallAvoidRequests,
+    setConferenceBlocks,
     setEnd,
     setHolidayPreferences,
     setMajorHolidayBlocks,

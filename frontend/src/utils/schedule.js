@@ -1,6 +1,7 @@
 import moment from "moment";
 
 import {
+  DEFAULT_CONFERENCE_BLOCKS,
   DATE_FMT,
   DEFAULT_MAJOR_HOLIDAY_BLOCKS,
   HOLIDAY_WEEKENDS,
@@ -9,6 +10,7 @@ import {
   MAJOR_HOLIDAYS,
   MAX_VACATION_WEEKS,
   PALETTE,
+  ROTATION_LABELS,
   STORAGE_KEY,
   STORAGE_VERSION,
 } from "../config/schedule";
@@ -45,6 +47,10 @@ export function tintHex(hex, ratio = 0.8) {
 
 export function createDefaultMajorHolidayBlocks() {
   return JSON.parse(JSON.stringify(DEFAULT_MAJOR_HOLIDAY_BLOCKS));
+}
+
+export function createDefaultConferenceBlocks() {
+  return JSON.parse(JSON.stringify(DEFAULT_CONFERENCE_BLOCKS));
 }
 
 export function getCallType(dateStr, exceptionMonths, majorHolidayBlocks = DEFAULT_MAJOR_HOLIDAY_BLOCKS) {
@@ -163,6 +169,18 @@ export function serializeMajorHolidayBlocks(blocks) {
         start: moment(half.start, DATE_FMT).format("YYYY-MM-DD"),
         end: moment(half.end, DATE_FMT).format("YYYY-MM-DD"),
       })),
+    ]),
+  );
+}
+
+export function serializeConferenceBlocks(blocks) {
+  return Object.fromEntries(
+    Object.entries(blocks).map(([key, block]) => [
+      key,
+      {
+        start: moment(block.start, DATE_FMT).format("YYYY-MM-DD"),
+        end: moment(block.end, DATE_FMT).format("YYYY-MM-DD"),
+      },
     ]),
   );
 }
@@ -519,6 +537,182 @@ export function buildCalendarEvents(schedule, roster, exceptionMonths, majorHoli
         textColor: "#fff",
         callType,
       },
+    };
+  });
+}
+
+function dateRangeLabel(from, to) {
+  return from === to ? from : `${from} to ${to}`;
+}
+
+function expandDisplayDateRange(from, to, weekdaysOnly = false) {
+  const dates = [];
+  if (!from || !to) return dates;
+  const start = moment(from, DATE_FMT);
+  const end = moment(to, DATE_FMT);
+  if (!start.isValid() || !end.isValid() || end.isBefore(start)) return dates;
+  const cur = start.clone();
+  while (cur.isSameOrBefore(end)) {
+    if (!weekdaysOnly || (cur.day() >= 1 && cur.day() <= 5)) {
+      dates.push(cur.format(DATE_FMT));
+    }
+    cur.add(1, "day");
+  }
+  return dates;
+}
+
+function rankLabel(rank, total) {
+  return `choice #${rank} of ${total}`;
+}
+
+export function buildRequestSummary({
+  start,
+  roster,
+  vacations,
+  callAvoidRequests,
+  boardExamIds,
+  holidayPreferences,
+  conferenceBlocks,
+  schedule,
+  rotations,
+  holidayWeekends,
+  majorHolidays,
+}) {
+  if (!schedule?.length) return [];
+  const startYear = moment(start, DATE_FMT).year();
+
+  const scheduleByDate = Object.fromEntries(schedule.map((item) => [item.date, item]));
+  const rotationsByFellowMonth = Object.fromEntries(
+    rotations.map((item) => [`${item.fellow}::${item.month}`, item.rotation]),
+  );
+  const assignedHolidayWeekendByFellow = Object.fromEntries(
+    (holidayWeekends || []).filter((item) => item.fellow).map((item) => [item.fellow, item.label]),
+  );
+  const assignedMajorHolidayByFellow = Object.fromEntries(
+    (majorHolidays || []).filter((item) => item.fellow).map((item) => [item.fellow, item.holiday]),
+  );
+
+  return roster.map((fellow) => {
+    const fellowName = fellow.name.trim();
+    const satisfied = [];
+    const unmet = [];
+
+    (vacations?.[fellow.id] || []).forEach((range, index) => {
+      if (!range.from || !range.to) return;
+      const requestedDates = expandDisplayDateRange(range.from, range.to, true);
+      const conflictingDates = requestedDates.filter((date) => scheduleByDate[date]?.fellow === fellowName);
+      const label = `Vacation week ${index + 1} (${dateRangeLabel(range.from, range.to)})`;
+      if (conflictingDates.length === 0) {
+        satisfied.push(label);
+      } else {
+        unmet.push({
+          label,
+          reason: `Call was still assigned on ${conflictingDates.join(", ")}, which indicates the schedule conflicts with a hard vacation blackout.`,
+        });
+      }
+    });
+
+    (callAvoidRequests?.[fellow.id] || []).forEach((range, index) => {
+      if (!range.from || !range.to) return;
+      const requestedDates = expandDisplayDateRange(range.from, range.to, false);
+      const conflictingDates = requestedDates.filter((date) => scheduleByDate[date]?.fellow === fellowName);
+      const label = `Call-avoid request ${index + 1} (${dateRangeLabel(range.from, range.to)})`;
+      if (conflictingDates.length === 0) {
+        satisfied.push(label);
+      } else {
+        unmet.push({
+          label,
+          reason: `Call remained assigned on ${conflictingDates.join(", ")} because higher-priority coverage, holiday, conference, and rotation constraints took precedence.`,
+        });
+      }
+    });
+
+    if (boardExamIds?.includes(fellow.id)) {
+      const octoberRotation = rotationsByFellowMonth[`${fellowName}::${startYear}-10`];
+      const label = "October board-exam request for imaging or research";
+      if (octoberRotation === "imaging" || octoberRotation === "research") {
+        satisfied.push(`${label} (${ROTATION_LABELS[octoberRotation]})`);
+      } else {
+        unmet.push({
+          label,
+          reason: `October rotation is ${ROTATION_LABELS[octoberRotation] || octoberRotation || "unassigned"}, so the board preference could not be met after monthly slot and quota constraints were enforced.`,
+        });
+      }
+    }
+
+    const holidayPref = holidayPreferences?.[fellow.id];
+    if (holidayPref?.holidayWeekends?.length) {
+      const assignedWeekend = assignedHolidayWeekendByFellow[fellowName];
+      const rank = holidayPref.holidayWeekends.indexOf(assignedWeekend) + 1;
+      if (rank === 1) {
+        satisfied.push(`Holiday weekend preference (${assignedWeekend}, ${rankLabel(rank, holidayPref.holidayWeekends.length)})`);
+      } else {
+        unmet.push({
+          label: `Holiday weekend preference (${assignedWeekend || "none assigned"})`,
+          reason: assignedWeekend
+            ? `Received ${rankLabel(rank, holidayPref.holidayWeekends.length)} instead of the top-ranked weekend because each fellow must cover one unique holiday weekend.`
+            : "No holiday weekend assignment was found in the solved schedule.",
+        });
+      }
+    }
+
+    if (holidayPref?.majorHolidays?.length) {
+      const assignedMajor = assignedMajorHolidayByFellow[fellowName];
+      const rank = holidayPref.majorHolidays.indexOf(assignedMajor) + 1;
+      if (rank === 1) {
+        satisfied.push(`Major holiday preference (${assignedMajor}, ${rankLabel(rank, holidayPref.majorHolidays.length)})`);
+      } else {
+        unmet.push({
+          label: `Major holiday preference (${assignedMajor || "none assigned"})`,
+          reason: assignedMajor
+            ? `Received ${rankLabel(rank, holidayPref.majorHolidays.length)} instead of the top-ranked major holiday because both halves of each major holiday must be distributed across the roster.`
+            : "No major holiday assignment was found in the solved schedule.",
+        });
+      }
+    }
+
+    if (fellow.pgy === "PGY-6" && conferenceBlocks?.heartCamp?.start && conferenceBlocks?.heartCamp?.end) {
+      const callDates = expandDisplayDateRange(conferenceBlocks.heartCamp.start, conferenceBlocks.heartCamp.end, false)
+        .filter((date) => scheduleByDate[date]?.fellow === fellowName);
+      const augustRotation = rotationsByFellowMonth[`${fellowName}::${startYear}-08`];
+      const blockedRotation = ["consult", "cath", "pcicu"].includes(augustRotation);
+      if (callDates.length === 0 && !blockedRotation) {
+        satisfied.push(`Heart Camp protections (${dateRangeLabel(conferenceBlocks.heartCamp.start, conferenceBlocks.heartCamp.end)} and no August consult/cath/PCICU rotation)`);
+      } else {
+        unmet.push({
+          label: "Heart Camp protections",
+          reason: [
+            callDates.length ? `call assigned on ${callDates.join(", ")}` : null,
+            blockedRotation ? `August rotation is ${ROTATION_LABELS[augustRotation] || augustRotation}` : null,
+          ].filter(Boolean).join("; ") || "The schedule conflicts with Heart Camp protections.",
+        });
+      }
+    }
+
+    if (fellow.pgy === "PGY-4" && conferenceBlocks?.chopConference?.start && conferenceBlocks?.chopConference?.end) {
+      const callDates = expandDisplayDateRange(conferenceBlocks.chopConference.start, conferenceBlocks.chopConference.end, false)
+        .filter((date) => scheduleByDate[date]?.fellow === fellowName);
+      const februaryRotation = rotationsByFellowMonth[`${fellowName}::${startYear + 1}-02`];
+      const blockedRotation = ["consult", "cath", "pcicu"].includes(februaryRotation);
+      if (callDates.length === 0 && !blockedRotation) {
+        satisfied.push(`CHOP Conference protections (${dateRangeLabel(conferenceBlocks.chopConference.start, conferenceBlocks.chopConference.end)} and no February consult/cath/PCICU rotation)`);
+      } else {
+        unmet.push({
+          label: "CHOP Conference protections",
+          reason: [
+            callDates.length ? `call assigned on ${callDates.join(", ")}` : null,
+            blockedRotation ? `February rotation is ${ROTATION_LABELS[februaryRotation] || februaryRotation}` : null,
+          ].filter(Boolean).join("; ") || "The schedule conflicts with CHOP Conference protections.",
+        });
+      }
+    }
+
+    return {
+      fellowId: fellow.id,
+      fellow: fellowName,
+      pgy: fellow.pgy,
+      satisfied,
+      unmet,
     };
   });
 }
