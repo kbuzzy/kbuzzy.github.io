@@ -65,6 +65,14 @@ function getValidationForResult(data, start, end, exceptionMonths, roster) {
   );
 }
 
+function safeBuildRequestSummary(input) {
+  try {
+    return buildRequestSummary(input);
+  } catch {
+    return [];
+  }
+}
+
 export function useScheduler() {
   const defaultWindow = academicYearWindow();
   const storedState = useMemo(() => readStoredState(), []);
@@ -111,7 +119,7 @@ export function useScheduler() {
     [schedule, roster, pcicuExceptionMonths, majorHolidayBlocks],
   );
   const requestSummary = useMemo(
-    () => buildRequestSummary({
+    () => safeBuildRequestSummary({
       start,
       roster,
       vacations,
@@ -420,7 +428,7 @@ export function useScheduler() {
   ]);
 
   const finalizeTestResult = useCallback(async (title, data, nextValidation, result, exceptionMonthsForRun, vacationsForRun, successMessage, failureMessage, runId) => {
-    const nextRequestSummary = buildRequestSummary({
+    const nextRequestSummary = safeBuildRequestSummary({
       start,
       roster,
       vacations: vacationsForRun,
@@ -700,6 +708,7 @@ export function useScheduler() {
     maxRetryAttempts,
     months,
     pcicuExceptionMonths,
+    requestSummary,
     retryUntilValid,
     roster,
     resetSavedState,

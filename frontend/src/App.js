@@ -110,7 +110,7 @@ export default function App() {
   const boardExamCount = boardExamIds.length;
   const exceptionMonthSummary = `${pcicuExceptionMonths.length}/6 selected`;
   const holidayBlockSummary = `${Object.values(majorHolidayBlocks).flat().length} date ranges`;
-  const conferenceSummary = `${Object.values(conferenceBlocks).filter((block) => block?.start && block?.end).length} ranges`;
+  const conferenceSummary = `${Object.values(conferenceBlocks || {}).filter((block) => block?.start && block?.end).length} ranges`;
   const holidayPreferenceSummary = `${roster.length} fellows ranked`;
   const inHouseCountSummary = `${roster.length} fellows`;
   const rotationSummary = `${months.length} months`;
@@ -499,7 +499,7 @@ export default function App() {
                 <InHouseCallSummary roster={roster} schedule={schedule} exceptionMonths={pcicuExceptionMonths} majorHolidayBlocks={majorHolidayBlocks} />
               </CollapsibleSection>
 
-              <CollapsibleSection title="Request Summary" summary={`${requestSummary.length} fellows`} defaultOpen={false}>
+              <CollapsibleSection title="Request Summary" summary={`${Array.isArray(requestSummary) ? requestSummary.length : 0} fellows`} defaultOpen={false}>
                 <RequestSummaryPanel summary={requestSummary} />
               </CollapsibleSection>
 
