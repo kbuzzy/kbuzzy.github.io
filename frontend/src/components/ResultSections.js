@@ -4,6 +4,9 @@ import { ROTATION_LABELS } from "../config/schedule";
 import { tableCellStyle, tableHeaderStyle } from "../styles/ui";
 import { colorWithAlpha, fellowColor, getCallType } from "../utils/schedule";
 
+const IN_HOUSE_TARGET_MIN = 19;
+const IN_HOUSE_TARGET_MAX = 22;
+
 export function RotationTable({ roster, rotations, months }) {
   if (!rotations.length) return null;
 
@@ -141,7 +144,7 @@ export function InHouseCallSummary({ roster, schedule, exceptionMonths, majorHol
         <tbody>
           {roster.map((fellow, index) => {
             const total = counts[fellow.name.trim()] || 0;
-            const inRange = total >= 19 && total <= 22;
+            const inRange = total >= IN_HOUSE_TARGET_MIN && total <= IN_HOUSE_TARGET_MAX;
             return (
               <tr key={fellow.id}>
                 <td style={{ ...tableCellStyle, background: colorWithAlpha(fellowColor(index), 0.12) }}>
@@ -157,7 +160,7 @@ export function InHouseCallSummary({ roster, schedule, exceptionMonths, majorHol
                 >
                   {total}
                 </td>
-                <td style={tableCellStyle}>19-22</td>
+                <td style={tableCellStyle}>{IN_HOUSE_TARGET_MIN}-{IN_HOUSE_TARGET_MAX}</td>
               </tr>
             );
           })}
@@ -286,7 +289,7 @@ export function RequestSummaryPanel({ summary }) {
   );
 }
 
-export function RulesValidationTab({ checks, error, requestSummary }) {
+export function RulesValidationTab({ checks, error }) {
   const sections = [
     {
       title: "Roster Rules",
@@ -421,8 +424,6 @@ export function RulesValidationTab({ checks, error, requestSummary }) {
           </div>
         ))}
       </div>
-
-      <RequestSummaryPanel summary={requestSummary} />
       <ValidationPanel checks={checks} />
     </div>
   );

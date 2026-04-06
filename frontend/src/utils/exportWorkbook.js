@@ -162,6 +162,51 @@ function buildAssignmentsSheet(workbook, roster, vacations, schedule, holidayWee
   });
 }
 
+function buildRequestSummarySheet(workbook, summary) {
+  const sheet = workbook.addWorksheet("Request Summary");
+  sheet.columns = [
+    { width: 22 },
+    { width: 12 },
+    { width: 14 },
+    { width: 80 },
+  ];
+
+  const titleRow = sheet.getRow(1);
+  titleRow.getCell(1).value = "Per-Fellow Request Summary";
+  titleRow.getCell(1).font = { bold: true, size: 12 };
+  titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCE7F3" } };
+
+  const headerRow = sheet.getRow(3);
+  ["Fellow", "PGY", "Status", "Request"].forEach((header, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = header;
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+    styleCalendarCell(cell);
+  });
+
+  let rowIndex = 4;
+  (summary?.length ? summary : [{ fellow: "None", pgy: "", satisfied: [], unmet: [] }]).forEach((item) => {
+    const rows = [
+      ...item.satisfied.map((entry) => ({ status: "Satisfied", text: entry })),
+      ...item.unmet.map((entry) => ({ status: "Not satisfied", text: `${entry.label}. ${entry.reason}` })),
+    ];
+    const effectiveRows = rows.length ? rows : [{ status: "None", text: "No specific requests were entered for this fellow." }];
+
+    effectiveRows.forEach((entry) => {
+      const row = sheet.getRow(rowIndex);
+      row.getCell(1).value = item.fellow;
+      row.getCell(2).value = item.pgy;
+      row.getCell(3).value = entry.status;
+      row.getCell(4).value = entry.text;
+      for (let col = 1; col <= 4; col += 1) {
+        styleCalendarCell(row.getCell(col));
+      }
+      rowIndex += 1;
+    });
+  });
+}
+
 export async function exportCalendarWorkbook(
   schedule,
   startStr,
@@ -172,6 +217,7 @@ export async function exportCalendarWorkbook(
   majorHolidayAssignments,
   majorHolidayBlocks,
   exceptionMonths,
+  requestSummary,
   options = {},
 ) {
   const { download = true } = options;
@@ -199,6 +245,7 @@ export async function exportCalendarWorkbook(
     majorHolidayAssignments,
     majorHolidayBlocks,
   );
+  buildRequestSummarySheet(workbook, requestSummary);
 
   if (download) {
     const buffer = await workbook.xlsx.writeBuffer();

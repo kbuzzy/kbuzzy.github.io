@@ -420,6 +420,19 @@ export function useScheduler() {
   ]);
 
   const finalizeTestResult = useCallback(async (title, data, nextValidation, result, exceptionMonthsForRun, vacationsForRun, successMessage, failureMessage, runId) => {
+    const nextRequestSummary = buildRequestSummary({
+      start,
+      roster,
+      vacations: vacationsForRun,
+      callAvoidRequests,
+      boardExamIds,
+      holidayPreferences,
+      conferenceBlocks,
+      schedule: data.schedule || [],
+      rotations: data.rotations || [],
+      holidayWeekends: data.holiday_weekends || [],
+      majorHolidays: data.major_holidays || [],
+    });
     const workbook = await exportCalendarWorkbook(
       data.schedule || [],
       start,
@@ -430,6 +443,7 @@ export function useScheduler() {
       data.major_holidays || [],
       majorHolidayBlocks,
       exceptionMonthsForRun,
+      nextRequestSummary,
       { download: false },
     );
     const hasValidation = nextValidation.length > 0;
@@ -462,7 +476,7 @@ export function useScheduler() {
         `Validation result: ${validationPassed ? "all checks passed" : "one or more checks failed"}`,
       ],
     };
-  }, [applySolvedResult, end, majorHolidayBlocks, retryUntilValid, roster, start]);
+  }, [applySolvedResult, boardExamIds, callAvoidRequests, conferenceBlocks, end, holidayPreferences, majorHolidayBlocks, retryUntilValid, roster, start]);
 
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -628,7 +642,8 @@ export function useScheduler() {
     majorHolidays,
     majorHolidayBlocks,
     pcicuExceptionMonths,
-  ), [end, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, roster, schedule, start, vacations]);
+    requestSummary,
+  ), [end, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, requestSummary, roster, schedule, start, vacations]);
 
   const resetSavedState = useCallback(() => {
     if (typeof window !== "undefined") {

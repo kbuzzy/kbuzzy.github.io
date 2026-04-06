@@ -21,6 +21,7 @@ import {
   HolidayWeekendTable,
   InHouseCallSummary,
   MajorHolidayTable,
+  RequestSummaryPanel,
   RotationTable,
   RulesValidationTab,
   ValidationPanel,
@@ -498,6 +499,10 @@ export default function App() {
                 <InHouseCallSummary roster={roster} schedule={schedule} exceptionMonths={pcicuExceptionMonths} majorHolidayBlocks={majorHolidayBlocks} />
               </CollapsibleSection>
 
+              <CollapsibleSection title="Request Summary" summary={`${requestSummary.length} fellows`} defaultOpen={false}>
+                <RequestSummaryPanel summary={requestSummary} />
+              </CollapsibleSection>
+
               <CollapsibleSection title="Monthly Rotations" summary={rotationSummary} defaultOpen={false}>
                 <RotationTable roster={roster} rotations={rotations} months={months} />
               </CollapsibleSection>
@@ -513,7 +518,7 @@ export default function App() {
           </>
         )
       ) : (
-        <RulesValidationTab checks={validation} error={error} requestSummary={requestSummary} />
+        <RulesValidationTab checks={validation} error={error} />
       )}
       {showScrollTop && (
         <button
