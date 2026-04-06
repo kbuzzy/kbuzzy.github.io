@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import Optional
 from solver import generate_schedule
@@ -40,11 +40,11 @@ class ScheduleRequest(BaseModel):
     fellows: list[str]
     start: str
     end: str
-    vacations: Optional[dict[str, list[str]]] = {}
-    call_avoid_requests: Optional[dict[str, list[str]]] = {}
-    holidays: Optional[dict[str, list[str]]] = {}
+    vacations: Optional[dict[str, list[str]]] = Field(default_factory=dict)
+    call_avoid_requests: Optional[dict[str, list[str]]] = Field(default_factory=dict)
+    holidays: Optional[dict[str, list[str]]] = Field(default_factory=dict)
     pgy_years: dict[str, str]
-    board_exam_fellows: Optional[list[str]] = []
+    board_exam_fellows: Optional[list[str]] = Field(default_factory=list)
     holiday_preferences: dict[str, dict[str, list[str]]]
     major_holiday_blocks: Optional[dict[str, list[dict[str, str]]]] = None
     conference_blocks: Optional[dict[str, dict[str, str]]] = None

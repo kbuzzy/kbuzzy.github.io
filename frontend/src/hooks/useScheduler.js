@@ -73,6 +73,31 @@ function safeBuildRequestSummary(input) {
   }
 }
 
+export function buildSummaryForSolvedRun({
+  start,
+  roster,
+  vacations,
+  callAvoidRequests,
+  boardExamIds,
+  holidayPreferences,
+  conferenceBlocks,
+  data,
+}) {
+  return safeBuildRequestSummary({
+    start,
+    roster,
+    vacations,
+    callAvoidRequests,
+    boardExamIds,
+    holidayPreferences,
+    conferenceBlocks,
+    schedule: data.schedule || [],
+    rotations: data.rotations || [],
+    holidayWeekends: data.holiday_weekends || [],
+    majorHolidays: data.major_holidays || [],
+  });
+}
+
 export function useScheduler() {
   const defaultWindow = academicYearWindow();
   const storedState = useMemo(() => readStoredState(), []);
@@ -427,19 +452,30 @@ export function useScheduler() {
     solveWithRetries,
   ]);
 
-  const finalizeTestResult = useCallback(async (title, data, nextValidation, result, exceptionMonthsForRun, vacationsForRun, successMessage, failureMessage, runId) => {
-    const nextRequestSummary = safeBuildRequestSummary({
+  const finalizeTestResult = useCallback(async (
+    title,
+    data,
+    nextValidation,
+    result,
+    exceptionMonthsForRun,
+    vacationsForRun,
+    callAvoidRequestsForRun,
+    boardExamIdsForRun,
+    holidayPreferencesForRun,
+    conferenceBlocksForRun,
+    successMessage,
+    failureMessage,
+    runId,
+  ) => {
+    const nextRequestSummary = buildSummaryForSolvedRun({
       start,
       roster,
       vacations: vacationsForRun,
-      callAvoidRequests,
-      boardExamIds,
-      holidayPreferences,
-      conferenceBlocks,
-      schedule: data.schedule || [],
-      rotations: data.rotations || [],
-      holidayWeekends: data.holiday_weekends || [],
-      majorHolidays: data.major_holidays || [],
+      callAvoidRequests: callAvoidRequestsForRun,
+      boardExamIds: boardExamIdsForRun,
+      holidayPreferences: holidayPreferencesForRun,
+      conferenceBlocks: conferenceBlocksForRun,
+      data,
     });
     const workbook = await exportCalendarWorkbook(
       data.schedule || [],
@@ -484,7 +520,7 @@ export function useScheduler() {
         `Validation result: ${validationPassed ? "all checks passed" : "one or more checks failed"}`,
       ],
     };
-  }, [applySolvedResult, boardExamIds, callAvoidRequests, conferenceBlocks, end, holidayPreferences, majorHolidayBlocks, retryUntilValid, roster, start]);
+  }, [applySolvedResult, end, majorHolidayBlocks, retryUntilValid, roster, start]);
 
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -527,6 +563,10 @@ export function useScheduler() {
         result,
         randomExceptionMonths,
         randomVacations,
+        randomCallAvoidRequests,
+        randomBoardExamIds,
+        randomPreferences,
+        conferenceBlocks,
         "Random scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked.",
         "Random scheduling request completed",
         runId,
@@ -557,7 +597,7 @@ export function useScheduler() {
         setLoading(false);
       }
     }
-  }, [apiConfigured, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, retryUntilValid, roster, solveWithRetries, start]);
+  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, retryUntilValid, roster, solveWithRetries, start]);
 
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -599,6 +639,10 @@ export function useScheduler() {
         result,
         typicalExceptionMonths,
         typicalVacations,
+        typicalCallAvoidRequests,
+        typicalBoardExamIds,
+        typicalPreferences,
+        conferenceBlocks,
         "Typical scheduling request succeeded, validation checks passed, calendar data rendered, and workbook export generation worked.",
         "Typical scheduling request completed",
         runId,
@@ -638,7 +682,7 @@ export function useScheduler() {
         setLoading(false);
       }
     }
-  }, [apiConfigured, end, finalizeTestResult, majorHolidayBlocks, retryUntilValid, roster, solveWithRetries, start, maxRetryAttempts]);
+  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, retryUntilValid, roster, solveWithRetries, start, maxRetryAttempts]);
 
   const exportWorkbook = useCallback(() => exportCalendarWorkbook(
     schedule,
