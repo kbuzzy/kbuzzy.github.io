@@ -187,16 +187,21 @@ function buildRequestSummarySheet(workbook, summary) {
 
   let rowIndex = 4;
   (summary?.length ? summary : [{ fellow: "None", pgy: "", satisfied: [], unmet: [] }]).forEach((item) => {
+    const satisfied = Array.isArray(item?.satisfied) ? item.satisfied : [];
+    const unmet = Array.isArray(item?.unmet) ? item.unmet : [];
     const rows = [
-      ...item.satisfied.map((entry) => ({ status: "Satisfied", text: entry })),
-      ...item.unmet.map((entry) => ({ status: "Not satisfied", text: `${entry.label}. ${entry.reason}` })),
+      ...satisfied.map((entry) => ({ status: "Satisfied", text: entry })),
+      ...unmet.map((entry) => ({
+        status: "Not satisfied",
+        text: `${entry?.label || "Request"}. ${entry?.reason || "No explanation was provided."}`,
+      })),
     ];
     const effectiveRows = rows.length ? rows : [{ status: "None", text: "No specific requests were entered for this fellow." }];
 
     effectiveRows.forEach((entry) => {
       const row = sheet.getRow(rowIndex);
-      row.getCell(1).value = item.fellow;
-      row.getCell(2).value = item.pgy;
+      row.getCell(1).value = item?.fellow || "Unknown fellow";
+      row.getCell(2).value = item?.pgy || "";
       row.getCell(3).value = entry.status;
       row.getCell(4).value = entry.text;
       for (let col = 1; col <= 4; col += 1) {

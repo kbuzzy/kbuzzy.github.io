@@ -262,28 +262,32 @@ export function RequestSummaryPanel({ summary }) {
         Request summary
       </div>
       <div style={{ padding: 16, display: "grid", gap: 12 }}>
-        {summary.map((item) => (
-          <div key={item.fellowId} style={{ border: "1px solid #e6ebf1", borderRadius: 8, padding: 12 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>
-              {item.fellow} <span style={{ color: "#667085", fontWeight: 500 }}>({item.pgy})</span>
+        {summary.map((item, index) => {
+          const satisfied = Array.isArray(item?.satisfied) ? item.satisfied : [];
+          const unmet = Array.isArray(item?.unmet) ? item.unmet : [];
+          return (
+            <div key={item?.fellowId || `${item?.fellow || "unknown"}-${index}`} style={{ border: "1px solid #e6ebf1", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                {item?.fellow || "Unknown fellow"} <span style={{ color: "#667085", fontWeight: 500 }}>({item?.pgy || "-"})</span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                {satisfied.map((entry) => (
+                  <li key={`ok-${entry}`} style={{ color: "#155724" }}>
+                    Satisfied: {entry}
+                  </li>
+                ))}
+                {unmet.map((entry, unmetIndex) => (
+                  <li key={`miss-${entry?.label || unmetIndex}`} style={{ color: "#8a4b08" }}>
+                    Not satisfied: {entry?.label || "Request"}. {entry?.reason || "No explanation was provided."}
+                  </li>
+                ))}
+                {satisfied.length === 0 && unmet.length === 0 && (
+                  <li style={{ color: "#667085" }}>No specific requests were entered for this fellow.</li>
+                )}
+              </ul>
             </div>
-            <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
-              {item.satisfied.map((entry) => (
-                <li key={`ok-${entry}`} style={{ color: "#155724" }}>
-                  Satisfied: {entry}
-                </li>
-              ))}
-              {item.unmet.map((entry) => (
-                <li key={`miss-${entry.label}`} style={{ color: "#8a4b08" }}>
-                  Not satisfied: {entry.label}. {entry.reason}
-                </li>
-              ))}
-              {item.satisfied.length === 0 && item.unmet.length === 0 && (
-                <li style={{ color: "#667085" }}>No specific requests were entered for this fellow.</li>
-              )}
-            </ul>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
