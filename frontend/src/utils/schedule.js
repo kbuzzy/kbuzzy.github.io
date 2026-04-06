@@ -174,9 +174,13 @@ export function serializeMajorHolidayBlocks(blocks) {
 }
 
 export function serializeConferenceBlocks(blocks) {
+  const keyMap = {
+    heartCamp: "heart_camp",
+    chopConference: "chop_conference",
+  };
   return Object.fromEntries(
     Object.entries(blocks).map(([key, block]) => [
-      key,
+      keyMap[key] || key,
       {
         start: moment(block.start, DATE_FMT).format("YYYY-MM-DD"),
         end: moment(block.end, DATE_FMT).format("YYYY-MM-DD"),

@@ -13,6 +13,7 @@ import {
   expandDateRanges,
   getCallType,
   listCandidateVacationWeeks,
+  serializeConferenceBlocks,
 } from "./schedule";
 import { INITIAL_ROSTER } from "../config/schedule";
 
@@ -155,5 +156,14 @@ describe("buildRequestSummary", () => {
     expect(deepthi.unmet.some((item) => item.label.includes("Call-avoid request 1"))).toBe(true);
     expect(deepthi.unmet.some((item) => item.label.includes("October board-exam request"))).toBe(true);
     expect(deepthi.unmet.some((item) => item.label.includes("Holiday weekend preference"))).toBe(true);
+  });
+});
+
+describe("serializeConferenceBlocks", () => {
+  test("converts frontend conference keys to backend payload keys", () => {
+    expect(serializeConferenceBlocks(createDefaultConferenceBlocks())).toEqual({
+      heart_camp: { start: "2026-08-21", end: "2026-08-26" },
+      chop_conference: { start: "2027-02-03", end: "2027-02-07" },
+    });
   });
 });
