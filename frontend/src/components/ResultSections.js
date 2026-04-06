@@ -314,6 +314,8 @@ export function RulesValidationTab({ checks, error }) {
         "Research may repeat when needed, but no fellow may have more than two research months in a row.",
         "Long runs of consult, cath, and PCICU are discouraged; stretches longer than two months are treated as a soft penalty.",
         "October board-exam takers are steered toward imaging or research when feasible.",
+        "Third-year fellows (PGY-6) cannot be on consult, cath, or PCICU in August because of Heart Camp.",
+        "First-year fellows (PGY-4) cannot be on consult, cath, or PCICU in February because of CHOP Conference.",
       ],
     },
     {
@@ -330,6 +332,9 @@ export function RulesValidationTab({ checks, error }) {
         "The cath fellow is softly preferred for Thursday call when feasible.",
         "A fellow on a non-holiday Thursday call cannot also take the following weekend block, whether it is a standard weekend or a holiday weekend.",
         "No fellow can be assigned to two weekend blocks in a row.",
+        "Third-year fellows (PGY-6) cannot be on call during the configured Heart Camp dates.",
+        "First-year fellows (PGY-4) cannot be on call during the configured CHOP Conference dates.",
+        "In-house calls must stay within the required annual target range for every fellow.",
       ],
     },
     {
@@ -354,6 +359,7 @@ export function RulesValidationTab({ checks, error }) {
         "Each fellow starts with four vacation-week slots by default.",
         "Vacation weeks are entered as Monday-Friday ranges.",
         "Fellows cannot be assigned call on vacation dates.",
+        "Additional single-day or date-range call-avoid requests are treated as lower-priority soft requests.",
       ],
     },
     {
@@ -375,7 +381,10 @@ export function RulesValidationTab({ checks, error }) {
         "No fellow is assigned back-to-back weekends.",
         "Consult fellows are excluded from weekend call in their consult month.",
         "PCICU fellows are excluded from weekend call in their PCICU month.",
+        "Third-year fellows stay off consult, cath, and PCICU in August and off call during Heart Camp.",
+        "First-year fellows stay off consult, cath, and PCICU in February and off call during CHOP Conference.",
         "Thursday-to-following-weekend conflicts are blocked.",
+        "Each fellow stays within the required in-house call target range.",
         "Thursday cath coverage is tracked.",
         "Holiday weekend coverage is summarized and checked.",
       ],
