@@ -1,5 +1,6 @@
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 
@@ -7,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from main import ScheduleRequest
+from main import ScheduleRequest, vacation_overlap_errors
 
 
 class ScheduleRequestModelTests(unittest.TestCase):
@@ -48,6 +49,16 @@ class ScheduleRequestModelTests(unittest.TestCase):
 
         self.assertEqual(second.vacations, {})
         self.assertEqual(second.board_exam_fellows, [])
+
+    def test_vacation_overlap_errors_allow_two_fellows_but_not_three(self):
+        vacations = {
+            "A": [datetime.strptime("07/06/2026", "%m/%d/%Y")],
+            "B": [datetime.strptime("07/06/2026", "%m/%d/%Y")],
+            "C": [datetime.strptime("07/06/2026", "%m/%d/%Y")],
+        }
+
+        self.assertEqual(vacation_overlap_errors({"A": vacations["A"], "B": vacations["B"]}), [])
+        self.assertEqual(vacation_overlap_errors(vacations), ["07/06/2026: A, B, C"])
 
 
 if __name__ == "__main__":

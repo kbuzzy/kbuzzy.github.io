@@ -823,6 +823,16 @@ export function buildRequestSummary({
   const assignedMajorHolidayByFellow = Object.fromEntries(
     (majorHolidays || []).filter((item) => item.fellow).map((item) => [item.fellow, item.holiday]),
   );
+  const holidayCoverageDates = new Set();
+  [...(holidayWeekends || []), ...(majorHolidays || [])].forEach((item) => {
+    if (!item.start || !item.end) return;
+    const cur = moment(item.start, DATE_FMT);
+    const last = moment(item.end, DATE_FMT);
+    while (cur.isSameOrBefore(last)) {
+      holidayCoverageDates.add(cur.format(DATE_FMT));
+      cur.add(1, "day");
+    }
+  });
 
   return roster.map((fellow) => {
     const fellowName = fellow.name.trim();
@@ -837,9 +847,12 @@ export function buildRequestSummary({
       if (conflictingDates.length === 0) {
         satisfied.push(label);
       } else {
+        const holidayConflicts = conflictingDates.filter((date) => holidayCoverageDates.has(date));
         unmet.push({
           label,
-          reason: `Call was still assigned on ${conflictingDates.join(", ")}, which indicates the schedule conflicts with a hard vacation blackout.`,
+          reason: holidayConflicts.length
+            ? `Call was assigned on ${conflictingDates.join(", ")}. Vacation dates that overlap holiday coverage can only be honored when the fellow also has the corresponding holiday break; otherwise an alternative vacation week is needed.`
+            : `Call was still assigned on ${conflictingDates.join(", ")}, which indicates the schedule conflicts with a hard vacation blackout.`,
         });
       }
     });

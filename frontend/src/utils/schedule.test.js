@@ -234,6 +234,76 @@ describe("buildRequestSummary", () => {
     expect(deepthi.unmet.some((item) => item.label.includes("October board-exam rotation protection"))).toBe(true);
     expect(deepthi.unmet.some((item) => item.label.includes("Holiday weekend preference"))).toBe(true);
   });
+
+  test("counts either half of a major holiday as satisfying the parent holiday preference", () => {
+    const summary = buildRequestSummary({
+      start: DEFAULT_WINDOW.start,
+      roster: INITIAL_ROSTER,
+      vacations: {},
+      callAvoidRequests: {},
+      boardExamIds: [],
+      holidayPreferences: {
+        f1: {
+          majorHolidays: ["Thanksgiving", "Christmas", "New Year's"],
+          holidayWeekends: [],
+        },
+      },
+      conferenceBlocks: createDefaultConferenceBlocks(),
+      schedule: [
+        { date: DEFAULT_WINDOW.start, fellow: "Amitie" },
+      ],
+      rotations: [],
+      holidayWeekends: [],
+      majorHolidays: [
+        {
+          holiday: "Thanksgiving",
+          label: "Thanksgiving A",
+          fellow: "Deepthi",
+        },
+      ],
+    });
+
+    const deepthi = summary.find((item) => item.fellow === "Deepthi");
+    expect(deepthi.satisfied).toContain("Major holiday preference (Thanksgiving, choice #1 of 3)");
+    expect(deepthi.unmet.some((item) => item.label.includes("Major holiday preference"))).toBe(false);
+  });
+
+  test("explains vacation conflicts differently when the request overlaps holiday coverage", () => {
+    const summary = buildRequestSummary({
+      start: DEFAULT_WINDOW.start,
+      roster: INITIAL_ROSTER,
+      vacations: {
+        f1: [{ from: "12/22/2026", to: "12/25/2026" }],
+      },
+      callAvoidRequests: {},
+      boardExamIds: [],
+      holidayPreferences: {
+        f1: {
+          majorHolidays: ["Thanksgiving", "Christmas", "New Year's"],
+          holidayWeekends: [],
+        },
+      },
+      conferenceBlocks: createDefaultConferenceBlocks(),
+      schedule: [
+        { date: "12/22/2026", fellow: "Deepthi" },
+      ],
+      rotations: [],
+      holidayWeekends: [],
+      majorHolidays: [
+        {
+          holiday: "Christmas",
+          label: "Christmas A",
+          start: "12/22/2026",
+          end: "12/24/2026",
+          fellow: "Deepthi",
+        },
+      ],
+    });
+
+    const deepthi = summary.find((item) => item.fellow === "Deepthi");
+    expect(deepthi.unmet[0].reason).toContain("overlap holiday coverage");
+    expect(deepthi.unmet[0].reason).toContain("alternative vacation week");
+  });
 });
 
 describe("serializeConferenceBlocks", () => {

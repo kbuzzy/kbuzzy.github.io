@@ -236,7 +236,7 @@ export default function App() {
             <div style={{ marginBottom: 16, background: "#fff", border: "1px solid #e0e0e0", borderRadius: 6, padding: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>Rotation rules now included</div>
               <div style={{ fontSize: 13, color: "#555" }}>The solver assigns monthly consult, imaging, research, cath, ACHD/EP, and PCICU rotations and then builds call assignments from those rotations.</div>
-              <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>Each fellow is assumed to have four vacation weeks available by default, and the holiday weekends are distributed one per fellow across the year.</div>
+              <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>Each fellow is assumed to have four vacation weeks available by default, with no more than two fellows on vacation at the same time.</div>
             </div>
 
             {!apiConfigured && (

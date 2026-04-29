@@ -103,6 +103,10 @@ def generate_schedule(
     covered_block_days = call_blocks["covered_block_days"]
     major_half_info = call_blocks["major_half_info"]
     weekend_credit_major_starts = call_blocks["weekend_credit_major_starts"]
+    day_to_block_start = {}
+    for start_idx, days_in_block in block_days_by_start.items():
+        for day_idx in days_in_block:
+            day_to_block_start[day_idx] = start_idx
 
     for start_idx, days_in_block in block_days_by_start.items():
         for later_idx in days_in_block[1:]:
@@ -120,6 +124,9 @@ def generate_schedule(
         for vac_date in vacations.get(fellow, []):
             date_idx = idx(vac_date, start_date)
             if 0 <= date_idx < days:
+                block_start = day_to_block_start.get(date_idx)
+                if block_start in holiday_block_starts or block_start in major_block_starts:
+                    continue
                 model.add(call[(fellow_idx, date_idx)] == 0)
 
     heart_camp_start = parse_iso(conference_windows["heart_camp"]["start"])
@@ -193,11 +200,6 @@ def generate_schedule(
             in_house_days.add(day_idx)
         elif weekday in (2, 3):
             in_house_days.add(day_idx)
-
-    day_to_block_start = {}
-    for start_idx, days_in_block in block_days_by_start.items():
-        for day_idx in days_in_block:
-            day_to_block_start[day_idx] = start_idx
 
     for day_idx in range(days - 1):
         next_day = day_idx + 1

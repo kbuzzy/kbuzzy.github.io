@@ -359,7 +359,9 @@ export function RulesValidationTab({ checks, error }) {
       items: [
         "Each fellow starts with four vacation-week slots by default.",
         "Vacation weeks are entered as Monday-Friday ranges.",
-        "Fellows cannot be assigned call on vacation dates.",
+        "No more than two fellows can be on vacation on the same date.",
+        "Fellows cannot be assigned call on vacation dates unless that vacation overlaps holiday coverage.",
+        "Vacation dates that overlap holiday coverage are honored only when the fellow also has the corresponding holiday break; otherwise an alternative vacation week is needed.",
         "Additional single-day or date-range call-avoid requests are treated as lower-priority soft requests.",
       ],
     },

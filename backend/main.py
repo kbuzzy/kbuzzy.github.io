@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from solver import generate_schedule
 
@@ -96,6 +96,107 @@ def parse_date_map(mapping: dict[str, list[str]]) -> dict[str, list[datetime]]:
     return {k: parse_date_list(v) for k, v in mapping.items()}
 
 
+def format_date_range(dates: list[datetime]) -> str:
+    if not dates:
+        return ""
+    ordered = sorted(dates)
+    if ordered[0] == ordered[-1]:
+        return ordered[0].strftime(DATE_FMT)
+    return f"{ordered[0].strftime(DATE_FMT)}-{ordered[-1].strftime(DATE_FMT)}"
+
+
+def consecutive_ranges(dates: list[datetime]) -> list[list[datetime]]:
+    ranges: list[list[datetime]] = []
+    for date in sorted(set(dates)):
+        if not ranges or date != ranges[-1][-1] + timedelta(days=1):
+            ranges.append([date])
+        else:
+            ranges[-1].append(date)
+    return ranges
+
+
+def expand_iso_or_display_range(start: str, end: str) -> list[datetime]:
+    def parse_flexible(value: str) -> datetime:
+        for fmt in (DATE_FMT, "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+        raise ValueError(f"date must be in {DATE_FMT} or YYYY-MM-DD format, got: {value!r}")
+
+    current = parse_flexible(start)
+    last = parse_flexible(end)
+    dates = []
+    while current <= last:
+        dates.append(current)
+        current += timedelta(days=1)
+    return dates
+
+
+def build_infeasibility_hints(req: ScheduleRequest, start: datetime, end: datetime) -> list[str]:
+    hints: list[str] = []
+    vacations = parse_date_map(req.vacations)
+
+    out_of_window = []
+    for fellow, dates in vacations.items():
+        for vacation_range in consecutive_ranges(dates):
+            if vacation_range[0] < start or vacation_range[-1] > end:
+                out_of_window.append(f"{fellow} {format_date_range(vacation_range)}")
+    if out_of_window:
+        hints.append(
+            "Vacation dates outside the academic year are present and should be removed or corrected: "
+            + "; ".join(out_of_window[:4])
+            + ("." if len(out_of_window) <= 4 else "; ...")
+        )
+
+    vacation_sets = {fellow: set(dates) for fellow, dates in vacations.items()}
+    fellows_by_pgy: dict[str, list[str]] = {}
+    for fellow, pgy in req.pgy_years.items():
+        fellows_by_pgy.setdefault(pgy, []).append(fellow)
+
+    for pgy, fellows in fellows_by_pgy.items():
+        for index, first in enumerate(fellows):
+            for second in fellows[index + 1:]:
+                overlap = sorted(vacation_sets.get(first, set()).intersection(vacation_sets.get(second, set())))
+                weekday_overlap = [date for date in overlap if date.weekday() < 5]
+                if len(weekday_overlap) >= 3:
+                    hints.append(
+                        f"{first} and {second} are both {pgy} and are simultaneously on vacation for "
+                        f"{format_date_range(weekday_overlap)}. Same-PGY vacation overlap can make the "
+                        "fixed rotation and weekday-call rules infeasible."
+                    )
+
+    major_blocks = req.major_holiday_blocks or {}
+    for holiday, halves in major_blocks.items():
+        for half in halves:
+            block_dates = set(expand_iso_or_display_range(half.get("start", ""), half.get("end", "")))
+            label = half.get("label") or holiday
+            unavailable = [
+                fellow
+                for fellow, date_set in vacation_sets.items()
+                if date_set.intersection(block_dates)
+            ]
+            if unavailable:
+                hints.append(
+                    f"{label} overlaps vacation dates for {', '.join(unavailable)}; those fellows cannot cover that hard holiday half."
+                )
+
+    return hints[:6]
+
+
+def vacation_overlap_errors(vacations: dict[str, list[datetime]]) -> list[str]:
+    fellows_by_date: dict[datetime, list[str]] = {}
+    for fellow, dates in vacations.items():
+        for date in set(dates):
+            fellows_by_date.setdefault(date, []).append(fellow)
+
+    errors = []
+    for date, fellows in sorted(fellows_by_date.items()):
+        if len(fellows) > 2:
+            errors.append(f"{date.strftime(DATE_FMT)}: {', '.join(sorted(fellows))}")
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -120,6 +221,17 @@ def create_schedule(req: ScheduleRequest) -> dict:
     vacations = parse_date_map(req.vacations)
     call_avoid_requests = parse_date_map(req.call_avoid_requests)
     holidays = parse_date_map(req.holidays)
+
+    overlap_errors = vacation_overlap_errors(vacations)
+    if overlap_errors:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "no more than two fellows can be on vacation on the same date. "
+                "Choose alternative vacation weeks for: "
+                + " | ".join(overlap_errors[:5])
+            ),
+        )
 
     missing_pgy = [name for name in req.fellows if name not in req.pgy_years]
     if missing_pgy:
@@ -179,6 +291,13 @@ def create_schedule(req: ScheduleRequest) -> dict:
             req.solver_seed,
         )
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        detail = str(exc)
+        if "No feasible schedule found" in detail:
+            hints = build_infeasibility_hints(req, start, end)
+            if hints:
+                detail = detail + " Likely hard-constraint pressure points: " + " ".join(hints)
+            else:
+                detail = detail + " The full CP-SAT model was solved and reported infeasible, but no simple preflight conflict was detected."
+        raise HTTPException(status_code=422, detail=detail)
 
     return result
