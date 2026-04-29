@@ -339,6 +339,156 @@ export function completeHolidayPreferenceRankings(roster, preferences) {
   );
 }
 
+function csvEscape(value) {
+  const text = value == null ? "" : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        field += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else if (char !== "\r") {
+      field += char;
+    }
+  }
+  row.push(field);
+  rows.push(row);
+  return rows.filter((item) => item.some((value) => value.trim()));
+}
+
+export function exportScheduleRequestsCsv({
+  roster,
+  vacations,
+  callAvoidRequests,
+  boardExamIds,
+  holidayPreferences,
+  pcicuExceptionMonths,
+  majorHolidayBlocks,
+  conferenceBlocks,
+}) {
+  const rows = [["section", "fellow", "key", "group", "rank", "start", "end", "value"]];
+  roster.forEach((fellow) => {
+    (vacations?.[fellow.id] || []).forEach((range, index) => {
+      if (range.from || range.to) rows.push(["vacation", fellow.name, "", "", index + 1, range.from || "", range.to || "", ""]);
+    });
+    (callAvoidRequests?.[fellow.id] || []).forEach((range, index) => {
+      if (range.from || range.to) rows.push(["call_avoid", fellow.name, "", "", index + 1, range.from || "", range.to || "", ""]);
+    });
+    if (boardExamIds.includes(fellow.id)) {
+      rows.push(["board_exam", fellow.name, "", "", "", "", "", "true"]);
+    }
+    ["majorHolidays", "holidayWeekends"].forEach((key) => {
+      const section = key === "majorHolidays" ? "major_holiday_preference" : "holiday_weekend_preference";
+      const parts = preferenceParts(holidayPreferences?.[fellow.id]?.[key], key === "majorHolidays" ? MAJOR_HOLIDAYS : HOLIDAY_WEEKEND_OPTIONS);
+      ["important", "neutral"].forEach((group) => {
+        parts[group].forEach((value, index) => {
+          rows.push([section, fellow.name, key, group, index + 1, "", "", value]);
+        });
+      });
+    });
+  });
+  (pcicuExceptionMonths || []).forEach((month, index) => {
+    rows.push(["pcicu_exception_month", "", "", "", index + 1, "", "", month]);
+  });
+  Object.entries(majorHolidayBlocks || {}).forEach(([holiday, halves]) => {
+    halves.forEach((half, index) => {
+      rows.push(["major_holiday_block", "", holiday, half.label || `${holiday} ${index + 1}`, index + 1, half.start || "", half.end || "", ""]);
+    });
+  });
+  Object.entries(conferenceBlocks || {}).forEach(([key, block]) => {
+    rows.push(["conference_block", "", key, block.label || key, "", block.start || "", block.end || "", ""]);
+  });
+  return rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+}
+
+export function importScheduleRequestsCsv(text, roster) {
+  const parsedRows = parseCsv(text);
+  const [header, ...rows] = parsedRows;
+  if (!header || header.map((item) => item.trim()).join(",") !== "section,fellow,key,group,rank,start,end,value") {
+    throw new Error("Request import must use the exported scheduling request CSV format.");
+  }
+  const fellowByName = Object.fromEntries(roster.map((fellow) => [fellow.name.trim(), fellow]));
+  const vacations = Object.fromEntries(roster.map((fellow) => [fellow.id, []]));
+  const callAvoidRequests = Object.fromEntries(roster.map((fellow) => [fellow.id, []]));
+  const boardExamIds = [];
+  const holidayPreferences = createDefaultPreferenceState();
+  const pcicuExceptionMonths = [];
+  const majorHolidayBlocks = createDefaultMajorHolidayBlocks();
+  const conferenceBlocks = createDefaultConferenceBlocks();
+
+  roster.forEach((fellow) => {
+    holidayPreferences[fellow.id] = {
+      majorHolidays: { important: [], neutral: [] },
+      holidayWeekends: { important: [], neutral: [] },
+    };
+  });
+
+  rows.forEach((row) => {
+    const [section, fellowName, key, group, , start, end, value] = row.map((item) => item.trim());
+    const fellow = fellowName ? fellowByName[fellowName] : null;
+    if (fellowName && !fellow) {
+      throw new Error(`Request import references unknown fellow: ${fellowName}`);
+    }
+    if (section === "vacation" && fellow) {
+      vacations[fellow.id].push({ from: start, to: end });
+    } else if (section === "call_avoid" && fellow) {
+      callAvoidRequests[fellow.id].push({ from: start, to: end });
+    } else if (section === "board_exam" && fellow && value.toLowerCase() === "true") {
+      boardExamIds.push(fellow.id);
+    } else if ((section === "major_holiday_preference" || section === "holiday_weekend_preference") && fellow) {
+      const preferenceKey = section === "major_holiday_preference" ? "majorHolidays" : "holidayWeekends";
+      const targetGroup = group === "important" ? "important" : "neutral";
+      holidayPreferences[fellow.id][preferenceKey][targetGroup].push(value);
+    } else if (section === "pcicu_exception_month") {
+      pcicuExceptionMonths.push(value);
+    } else if (section === "major_holiday_block" && majorHolidayBlocks[key]) {
+      const index = Math.max(0, Math.min(1, Number(row[4]) - 1 || 0));
+      majorHolidayBlocks[key][index] = { ...majorHolidayBlocks[key][index], label: group || majorHolidayBlocks[key][index].label, start, end };
+    } else if (section === "conference_block" && conferenceBlocks[key]) {
+      conferenceBlocks[key] = { ...conferenceBlocks[key], label: group || conferenceBlocks[key].label, start, end };
+    }
+  });
+
+  roster.forEach((fellow) => {
+    holidayPreferences[fellow.id].majorHolidays = preferenceParts(holidayPreferences[fellow.id].majorHolidays, MAJOR_HOLIDAYS);
+    holidayPreferences[fellow.id].holidayWeekends = preferenceParts(holidayPreferences[fellow.id].holidayWeekends, HOLIDAY_WEEKEND_OPTIONS);
+  });
+
+  return {
+    vacations,
+    callAvoidRequests,
+    boardExamIds: Array.from(new Set(boardExamIds)),
+    holidayPreferences,
+    pcicuExceptionMonths: Array.from(new Set(pcicuExceptionMonths)).sort(),
+    majorHolidayBlocks,
+    conferenceBlocks,
+  };
+}
+
 export function readStoredState() {
   if (typeof window === "undefined") return null;
   try {
@@ -711,13 +861,13 @@ export function buildRequestSummary({
 
     if (boardExamIds?.includes(fellow.id)) {
       const octoberRotation = rotationsByFellowMonth[`${fellowName}::${startYear}-10`];
-      const label = "October board-exam request for imaging or research";
-      if (octoberRotation === "imaging" || octoberRotation === "research") {
-        satisfied.push(`${label} (${ROTATION_LABELS[octoberRotation]})`);
+      const label = "October board-exam rotation protection";
+      if (!["consult", "cath", "pcicu"].includes(octoberRotation)) {
+        satisfied.push(`${label} (${ROTATION_LABELS[octoberRotation] || octoberRotation || "unassigned"})`);
       } else {
         unmet.push({
           label,
-          reason: `October rotation is ${ROTATION_LABELS[octoberRotation] || octoberRotation || "unassigned"}, so the board preference could not be met after monthly slot and quota constraints were enforced.`,
+          reason: `October rotation is ${ROTATION_LABELS[octoberRotation] || octoberRotation || "unassigned"}, which conflicts with the hard board-exam rotation rule.`,
         });
       }
     }

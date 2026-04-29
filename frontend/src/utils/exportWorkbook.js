@@ -6,6 +6,7 @@ import {
   buildMajorHolidayRows,
   buildVacationRows,
   buildWeekendAssignmentRows,
+  exportScheduleRequestsCsv,
   fellowColor,
   getCallType,
 } from "./schedule";
@@ -212,6 +213,25 @@ function buildRequestSummarySheet(workbook, summary) {
   });
 }
 
+function buildSchedulingRequestsSheet(workbook, requestInputs) {
+  if (!requestInputs) return;
+  const sheet = workbook.addWorksheet("Scheduling Requests");
+  const rows = exportScheduleRequestsCsv(requestInputs).split("\n").map((line) => line.split(","));
+  sheet.columns = Array.from({ length: rows[0]?.length || 8 }, () => ({ width: 22 }));
+  rows.forEach((rowValues, rowIndex) => {
+    const row = sheet.getRow(rowIndex + 1);
+    rowValues.forEach((value, columnIndex) => {
+      const cell = row.getCell(columnIndex + 1);
+      cell.value = value.replace(/^"|"$/g, "").replace(/""/g, '"');
+      styleCalendarCell(cell);
+      if (rowIndex === 0) {
+        cell.font = { bold: true };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+      }
+    });
+  });
+}
+
 export async function exportCalendarWorkbook(
   schedule,
   startStr,
@@ -251,6 +271,7 @@ export async function exportCalendarWorkbook(
     majorHolidayBlocks,
   );
   buildRequestSummarySheet(workbook, requestSummary);
+  buildSchedulingRequestsSheet(workbook, options.requestInputs);
 
   if (download) {
     const buffer = await workbook.xlsx.writeBuffer();

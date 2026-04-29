@@ -60,6 +60,7 @@ export default function App() {
     error,
     events,
     exportWorkbook,
+    exportSchedulingRequests,
     generateSchedule,
     holidayPreferences,
     holidayWeekends,
@@ -71,9 +72,9 @@ export default function App() {
     months,
     pcicuExceptionMonths,
     requestSummary,
-    retryUntilValid,
     roster,
     resetSavedState,
+    importSchedulingRequests,
     rotations,
     runRandomTest,
     runTypicalTest,
@@ -88,7 +89,6 @@ export default function App() {
     setMajorHolidayBlocks,
     setMaxRetryAttempts,
     setPcicuExceptionMonths,
-    setRetryUntilValid,
     setRoster,
     setStart,
     setVacations,
@@ -118,6 +118,7 @@ export default function App() {
   const majorHolidaySummary = `${majorHolidays.length} half-blocks`;
   const [showScrollTop, setShowScrollTop] = React.useState(false);
   const [updateAvailable, setUpdateAvailable] = React.useState(false);
+  const requestImportRef = React.useRef(null);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -263,6 +264,35 @@ export default function App() {
               <button onClick={generateSchedule} disabled={loading || !apiConfigured} style={{ ...btnStyle, opacity: loading || !apiConfigured ? 0.6 : 1 }}>
                 {loading ? "Generating..." : "Generate schedule"}
               </button>
+              <button
+                onClick={exportSchedulingRequests}
+                disabled={loading}
+                style={{ ...btnStyle, background: "#51606f", opacity: loading ? 0.6 : 1 }}
+              >
+                Export requests CSV
+              </button>
+              <button
+                onClick={() => requestImportRef.current?.click()}
+                disabled={loading}
+                style={{ ...btnStyle, background: "#51606f", opacity: loading ? 0.6 : 1 }}
+              >
+                Import requests CSV
+              </button>
+              <input
+                ref={requestImportRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    await importSchedulingRequests(file);
+                  } finally {
+                    event.target.value = "";
+                  }
+                }}
+              />
               <div style={{ marginLeft: "auto", fontSize: 13, color: "#5b6470" }}>
                 Review details below, then generate the schedule.
               </div>
@@ -410,27 +440,20 @@ export default function App() {
                     borderRadius: 6,
                   }}
                 >
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#445" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, color: "#445" }}>Max solve attempts</span>
                     <input
-                      type="checkbox"
-                      checked={retryUntilValid}
-                      onChange={(e) => setRetryUntilValid(e.target.checked)}
+                      type="number"
+                      min="3"
+                      max="25"
+                      value={maxRetryAttempts}
+                      onChange={(e) => setMaxRetryAttempts(Math.min(25, Math.max(3, Number(e.target.value) || 3)))}
+                      style={{ ...inputStyle, width: 80 }}
                     />
-                    <span>Retry until valid</span>
-                  </label>
-                  {retryUntilValid && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 13, color: "#445" }}>Attempts</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="25"
-                        value={maxRetryAttempts}
-                        onChange={(e) => setMaxRetryAttempts(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
-                        style={{ ...inputStyle, width: 80 }}
-                      />
-                    </div>
-                  )}
+                  </div>
+                  <span style={{ fontSize: 12, color: "#667085" }}>
+                    The scheduler stops early after finding 3 valid schedules, then keeps the one with the best request satisfaction.
+                  </span>
                 </div>
               </div>
             </details>

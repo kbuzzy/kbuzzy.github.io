@@ -83,6 +83,7 @@ def generate_schedule(
         pgy_years=pgy_years,
         fellows=fellows,
         exception_tuesday_months=exception_tuesday_months,
+        board_exam_fellows=board_exam_fellows,
         start_year=start_year,
     )
     hard_month = build_hard_month_vars(
@@ -358,5 +359,6 @@ def generate_schedule(
         month_keys=month_keys,
         start_year=start_year,
         conference_blocks=conference_windows,
+        board_exam_fellows=board_exam_fellows,
     )
     return result

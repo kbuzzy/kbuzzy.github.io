@@ -24,8 +24,10 @@ import {
   createRandomPreferenceState,
   createTestCallAvoidRequests,
   createTypicalVacations,
+  exportScheduleRequestsCsv,
   expandDateRanges,
   expandWeekRanges,
+  importScheduleRequestsCsv,
   listMonths,
   randomVacationWeeks,
   readStoredState,
@@ -98,6 +100,28 @@ export function buildSummaryForSolvedRun({
     holidayWeekends: data.holiday_weekends || [],
     majorHolidays: data.major_holidays || [],
   });
+}
+
+export function requestSummaryScore(summary) {
+  return (summary || []).reduce((total, item) => {
+    const satisfied = Array.isArray(item?.satisfied) ? item.satisfied.length : 0;
+    const unmet = Array.isArray(item?.unmet) ? item.unmet.length : 0;
+    return total + satisfied - unmet;
+  }, 0);
+}
+
+function validationScore(checks) {
+  return (checks || []).filter((check) => check.ok).length;
+}
+
+function downloadTextFile(filename, text, type = "text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export function useScheduler() {
@@ -335,11 +359,11 @@ export function useScheduler() {
       selectedBoardExamIds,
       selectedPreferences,
       selectedExceptionMonths,
-      allowRetryUntilValid,
     } = options;
 
-    const totalAttempts = allowRetryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1;
-    let lastAttempt = null;
+    const totalAttempts = Math.max(3, Number(maxRetryAttempts) || 3);
+    const attempts = [];
+    const validAttempts = [];
     const signal = activeRequestControllerRef.current?.signal;
 
     for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
@@ -358,12 +382,48 @@ export function useScheduler() {
       const data = await requestSchedule(payload, signal);
       const nextValidation = getValidationForResult(data, start, end, selectedExceptionMonths, roster);
       const validationPassed = nextValidation.every((check) => check.ok);
-      lastAttempt = { data, nextValidation, validationPassed, attempt, totalAttempts };
-      if (validationPassed || !allowRetryUntilValid) break;
+      const requestSummaryForAttempt = buildSummaryForSolvedRun({
+        start,
+        roster,
+        vacations: vacationsById,
+        callAvoidRequests: callAvoidRequestsById,
+        boardExamIds: selectedBoardExamIds,
+        holidayPreferences: selectedPreferences,
+        conferenceBlocks,
+        data,
+      });
+      const attemptResult = {
+        data,
+        nextValidation,
+        validationPassed,
+        requestScore: requestSummaryScore(requestSummaryForAttempt),
+        validationScore: validationScore(nextValidation),
+        attempt,
+        totalAttempts,
+        validAttempts: 0,
+      };
+      attempts.push(attemptResult);
+      if (validationPassed) {
+        validAttempts.push(attemptResult);
+        if (validAttempts.length >= 3) break;
+      }
     }
 
-    return lastAttempt;
-  }, [buildSchedulePayload, end, maxRetryAttempts, requestSchedule, roster, start]);
+    const candidates = validAttempts.length ? validAttempts : attempts;
+    const bestAttempt = [...candidates].sort((left, right) => (
+      Number(right.validationPassed) - Number(left.validationPassed)
+        || right.requestScore - left.requestScore
+        || right.validationScore - left.validationScore
+        || left.attempt - right.attempt
+    ))[0];
+    return {
+      ...bestAttempt,
+      totalAttempts,
+      attemptsUsed: attempts.length,
+      validAttempts: validAttempts.length,
+      generatedTargetMet: validAttempts.length >= 3,
+    };
+  }, [buildSchedulePayload, conferenceBlocks, end, maxRetryAttempts, requestSchedule, roster, start]);
 
   const applySolvedResult = useCallback((data, nextValidation) => {
     setSchedule(data.schedule || []);
@@ -387,7 +447,7 @@ export function useScheduler() {
     const runId = activeRunIdRef.current + 1;
     activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
-    setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
+    setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: Math.max(3, Number(maxRetryAttempts) || 3) });
     setLoading(true);
     setError(null);
     setValidation([]);
@@ -418,14 +478,13 @@ export function useScheduler() {
         selectedBoardExamIds: boardExamIds,
         selectedPreferences: holidayPreferences,
         selectedExceptionMonths: pcicuExceptionMonths,
-        allowRetryUntilValid: retryUntilValid,
       });
       if (activeRunIdRef.current !== runId) {
         return;
       }
       applySolvedResult(result.data, result.nextValidation);
-      if (retryUntilValid && !result.validationPassed) {
-        setError(`No fully valid schedule was found after ${result.totalAttempts} attempt${result.totalAttempts === 1 ? "" : "s"}. The closest attempt is shown so you can review the remaining conflicts.`);
+      if (!result.validationPassed) {
+        setError(`No fully valid schedule was found after ${result.attemptsUsed} attempt${result.attemptsUsed === 1 ? "" : "s"}. The closest attempt is shown so you can review the remaining conflicts.`);
       }
     } catch (err) {
       if (err?.name === "AbortError") {
@@ -448,7 +507,6 @@ export function useScheduler() {
     holidayPreferences,
     maxRetryAttempts,
     pcicuExceptionMonths,
-    retryUntilValid,
     roster,
     vacations,
     solveWithRetries,
@@ -490,7 +548,19 @@ export function useScheduler() {
       majorHolidayBlocks,
       exceptionMonthsForRun,
       nextRequestSummary,
-      { download: false },
+      {
+        download: false,
+        requestInputs: {
+          roster,
+          vacations: vacationsForRun,
+          callAvoidRequests: callAvoidRequestsForRun,
+          boardExamIds: boardExamIdsForRun,
+          holidayPreferences: holidayPreferencesForRun,
+          pcicuExceptionMonths: exceptionMonthsForRun,
+          majorHolidayBlocks,
+          conferenceBlocks: conferenceBlocksForRun,
+        },
+      },
     );
     const hasValidation = nextValidation.length > 0;
     const hasEvents = (data.schedule || []).length > 0;
@@ -510,11 +580,12 @@ export function useScheduler() {
       title,
       message: ok
         ? successMessage
-        : retryUntilValid
-          ? `${failureMessage} after ${result.totalAttempts} attempt${result.totalAttempts === 1 ? "" : "s"}, but one or more checks still failed.`
-          : `${failureMessage}, but one or more checks still failed.`,
+        : `${failureMessage} after ${result.attemptsUsed} attempt${result.attemptsUsed === 1 ? "" : "s"}, but one or more checks still failed.`,
       details: [
-        `Attempts used: ${result.attempt}/${result.totalAttempts}`,
+        `Best schedule selected from attempt ${result.attempt}`,
+        `Solver attempts used: ${result.attemptsUsed}/${result.totalAttempts}`,
+        `Valid schedules generated: ${result.validAttempts}`,
+        `Request satisfaction score: ${result.requestScore}`,
         `Schedule days returned: ${(data.schedule || []).length}`,
         `Rotation assignments returned: ${(data.rotations || []).length}`,
         `Validation checks: ${nextValidation.length}`,
@@ -522,7 +593,7 @@ export function useScheduler() {
         `Validation result: ${validationPassed ? "all checks passed" : "one or more checks failed"}`,
       ],
     };
-  }, [applySolvedResult, end, majorHolidayBlocks, retryUntilValid, roster, start]);
+  }, [applySolvedResult, end, majorHolidayBlocks, roster, start]);
 
   const runRandomTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -530,7 +601,7 @@ export function useScheduler() {
     const runId = activeRunIdRef.current + 1;
     activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
-    setLoadingMode({ kind: "randomTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
+    setLoadingMode({ kind: "randomTest", attempt: 1, totalAttempts: Math.max(3, Number(maxRetryAttempts) || 3) });
     setLoading(true);
     setError(null);
     setTestResult(null);
@@ -555,7 +626,6 @@ export function useScheduler() {
         selectedBoardExamIds: randomBoardExamIds,
         selectedPreferences: randomPreferences,
         selectedExceptionMonths: randomExceptionMonths,
-        allowRetryUntilValid: retryUntilValid,
       });
       setBackendStatus("connected");
       setTestResult(await finalizeTestResult(
@@ -599,7 +669,7 @@ export function useScheduler() {
         setLoading(false);
       }
     }
-  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, retryUntilValid, roster, solveWithRetries, start]);
+  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, roster, solveWithRetries, start]);
 
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -607,7 +677,7 @@ export function useScheduler() {
     const runId = activeRunIdRef.current + 1;
     activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
-    setLoadingMode({ kind: "typicalTest", attempt: 1, totalAttempts: retryUntilValid ? Math.max(1, Number(maxRetryAttempts) || 1) : 1 });
+    setLoadingMode({ kind: "typicalTest", attempt: 1, totalAttempts: Math.max(3, Number(maxRetryAttempts) || 3) });
     setLoading(true);
     setError(null);
     setTestResult(null);
@@ -632,7 +702,6 @@ export function useScheduler() {
         selectedBoardExamIds: typicalBoardExamIds,
         selectedPreferences: typicalPreferences,
         selectedExceptionMonths: typicalExceptionMonths,
-        allowRetryUntilValid: retryUntilValid,
       });
       const nextResult = await finalizeTestResult(
         "Run Typical Schedule Test",
@@ -684,7 +753,7 @@ export function useScheduler() {
         setLoading(false);
       }
     }
-  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, retryUntilValid, roster, solveWithRetries, start, maxRetryAttempts]);
+  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, roster, solveWithRetries, start, maxRetryAttempts]);
 
   const exportWorkbook = useCallback(() => exportCalendarWorkbook(
     schedule,
@@ -697,7 +766,57 @@ export function useScheduler() {
     majorHolidayBlocks,
     pcicuExceptionMonths,
     requestSummary,
-  ), [end, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, requestSummary, roster, schedule, start, vacations]);
+    {
+      requestInputs: {
+        roster,
+        vacations,
+        callAvoidRequests,
+        boardExamIds,
+        holidayPreferences,
+        pcicuExceptionMonths,
+        majorHolidayBlocks,
+        conferenceBlocks,
+      },
+    },
+  ), [boardExamIds, callAvoidRequests, conferenceBlocks, end, holidayPreferences, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, requestSummary, roster, schedule, start, vacations]);
+
+  const exportSchedulingRequests = useCallback(() => {
+    const csv = exportScheduleRequestsCsv({
+      roster,
+      vacations,
+      callAvoidRequests,
+      boardExamIds,
+      holidayPreferences,
+      pcicuExceptionMonths,
+      majorHolidayBlocks,
+      conferenceBlocks,
+    });
+    downloadTextFile("fellowship_scheduling_requests.csv", csv);
+  }, [boardExamIds, callAvoidRequests, conferenceBlocks, holidayPreferences, majorHolidayBlocks, pcicuExceptionMonths, roster, vacations]);
+
+  const importSchedulingRequests = useCallback(async (file) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const imported = importScheduleRequestsCsv(text, roster);
+      setVacations(imported.vacations);
+      setCallAvoidRequests(imported.callAvoidRequests);
+      setBoardExamIds(imported.boardExamIds);
+      setHolidayPreferences(imported.holidayPreferences);
+      setPcicuExceptionMonths(imported.pcicuExceptionMonths);
+      setMajorHolidayBlocks(imported.majorHolidayBlocks);
+      setConferenceBlocks(imported.conferenceBlocks);
+      setSchedule([]);
+      setRotations([]);
+      setHolidayWeekends([]);
+      setMajorHolidays([]);
+      setValidation([]);
+      setTestResult(null);
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Could not import scheduling requests.");
+    }
+  }, [roster]);
 
   const resetSavedState = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -744,6 +863,7 @@ export function useScheduler() {
     error,
     events,
     exportWorkbook,
+    exportSchedulingRequests,
     generateSchedule,
     holidayPreferences,
     holidayWeekends,
@@ -769,6 +889,7 @@ export function useScheduler() {
     setConferenceBlocks,
     setEnd,
     setHolidayPreferences,
+    importSchedulingRequests,
     setMajorHolidayBlocks,
     setMaxRetryAttempts,
     setPcicuExceptionMonths,

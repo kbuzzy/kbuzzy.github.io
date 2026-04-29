@@ -108,6 +108,7 @@ class ValidationRuleTests(unittest.TestCase):
             pgy_years=PGY_YEARS,
             month_keys=build_month_keys(start_year),
             start_year=start_year,
+            board_exam_fellows=["Amitie"],
         )
 
     def test_fixture_passes_targeted_rule_checks(self):
@@ -161,6 +162,24 @@ class ValidationRuleTests(unittest.TestCase):
 
         self.assertFalse(consecutive_check["ok"])
         self.assertIn("07/12/2026", consecutive_check["detail"])
+
+    def test_board_exam_rotation_limit_is_reported(self):
+        rotations = [{"month": "2026-10", "fellow": fellow, "rotation": "research"} for fellow in FELLOWS]
+        rotations[0] = {"month": "2026-10", "fellow": "Amitie", "rotation": "consult"}
+
+        board_check = check_by_label(self.build_checks(rotations=rotations), "October board exam rotation limits")
+
+        self.assertFalse(board_check["ok"])
+        self.assertIn("Amitie", board_check["detail"])
+
+    def test_first_year_pcicu_before_december_is_reported(self):
+        rotations = [{"month": "2026-09", "fellow": fellow, "rotation": "research"} for fellow in FELLOWS]
+        rotations[0] = {"month": "2026-09", "fellow": "Amitie", "rotation": "pcicu"}
+
+        pcicu_check = check_by_label(self.build_checks(rotations=rotations), "First-year PCICU timing")
+
+        self.assertFalse(pcicu_check["ok"])
+        self.assertIn("Amitie", pcicu_check["detail"])
 
 
 if __name__ == "__main__":

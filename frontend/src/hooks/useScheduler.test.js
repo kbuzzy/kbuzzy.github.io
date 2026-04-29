@@ -1,4 +1,4 @@
-import { buildSummaryForSolvedRun } from "./useScheduler";
+import { buildSummaryForSolvedRun, requestSummaryScore } from "./useScheduler";
 import { INITIAL_ROSTER } from "../config/schedule";
 import { createDefaultConferenceBlocks } from "../utils/schedule";
 
@@ -38,6 +38,20 @@ describe("buildSummaryForSolvedRun", () => {
     const deepthi = summary.find((item) => item.fellow === "Deepthi");
     expect(deepthi).toBeDefined();
     expect(deepthi.unmet.some((item) => item.label.includes("Call-avoid request 1"))).toBe(true);
-    expect(deepthi.unmet.some((item) => item.label.includes("October board-exam request"))).toBe(true);
+    expect(deepthi.unmet.some((item) => item.label.includes("October board-exam rotation protection"))).toBe(true);
+  });
+});
+
+describe("requestSummaryScore", () => {
+  test("prefers schedules with more satisfied and fewer unmet requests", () => {
+    const better = requestSummaryScore([
+      { satisfied: ["Vacation", "Holiday"], unmet: [] },
+      { satisfied: ["Call avoid"], unmet: [] },
+    ]);
+    const worse = requestSummaryScore([
+      { satisfied: ["Vacation"], unmet: [{ label: "Holiday" }] },
+    ]);
+
+    expect(better).toBeGreaterThan(worse);
   });
 });

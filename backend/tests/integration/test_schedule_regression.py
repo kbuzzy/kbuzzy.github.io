@@ -71,6 +71,8 @@ class ScheduleRegressionTests(unittest.TestCase):
         self.assertTrue(check_by_label(checks, "Consecutive call days")["ok"])
         self.assertTrue(check_by_label(checks, "August Heart Camp rotation limits")["ok"])
         self.assertTrue(check_by_label(checks, "February CHOP Conference rotation limits")["ok"])
+        self.assertTrue(check_by_label(checks, "October board exam rotation limits")["ok"])
+        self.assertTrue(check_by_label(checks, "First-year PCICU timing")["ok"])
         self.assertTrue(check_by_label(checks, "Heart Camp call blackout")["ok"])
         self.assertTrue(check_by_label(checks, "CHOP Conference call blackout")["ok"])
 

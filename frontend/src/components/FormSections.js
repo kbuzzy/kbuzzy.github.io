@@ -17,7 +17,7 @@ export function BoardExamEditor({ roster, boardExamIds, onToggle }) {
       <label style={labelStyle}>
         October Board Exams
         <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
-          Soft preference: October exam takers are prioritized for imaging or research when possible
+          October exam takers cannot be assigned to consult, cath, or PCICU
         </span>
       </label>
       <div style={{ display: "grid", gap: 8 }}>

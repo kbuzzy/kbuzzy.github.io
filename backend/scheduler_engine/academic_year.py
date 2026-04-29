@@ -34,6 +34,10 @@ def october_month_key(start_year: int) -> str:
     return f"{start_year}-10"
 
 
+def december_month_key(start_year: int) -> str:
+    return f"{start_year}-12"
+
+
 def august_month_key(start_year: int) -> str:
     return f"{start_year}-08"
 

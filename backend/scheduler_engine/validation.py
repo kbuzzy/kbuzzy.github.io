@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from .academic_year import august_month_key, february_month_key, first_month_key
+from .academic_year import august_month_key, december_month_key, february_month_key, first_month_key, october_month_key
 from .constants import (
     DEFAULT_CONFERENCE_BLOCKS,
     DEFAULT_MAJOR_HOLIDAYS,
@@ -30,6 +30,7 @@ def build_validation(
     month_keys: list[str],
     start_year: int,
     conference_blocks: dict[str, dict[str, str]] | None = None,
+    board_exam_fellows: list[str] | None = None,
 ) -> list[dict]:
     if not schedule:
         return []
@@ -77,11 +78,14 @@ def build_validation(
     chop_call_errors = []
     august_rotation_errors = []
     february_rotation_errors = []
+    board_exam_rotation_errors = []
+    first_year_pcicu_errors = []
     in_house_count_errors = []
     holiday_counts: dict[str, int] = {}
     major_holiday_counts: dict[str, int] = {}
 
     conference_windows = conference_blocks or DEFAULT_CONFERENCE_BLOCKS
+    board_exam_set = set(board_exam_fellows or [])
     heart_camp_start = datetime.strptime(conference_windows["heart_camp"]["start"], "%Y-%m-%d")
     heart_camp_end = datetime.strptime(conference_windows["heart_camp"]["end"], "%Y-%m-%d")
     chop_start = datetime.strptime(conference_windows["chop_conference"]["start"], "%Y-%m-%d")
@@ -128,6 +132,10 @@ def build_validation(
                 august_rotation_errors.append(f"{fellow} is assigned to {rotation_name} in {month}")
             if pgy_years.get(fellow) == "PGY-4" and month == february_month_key(start_year) and rotation_name in {"consult", "cath", "pcicu"}:
                 february_rotation_errors.append(f"{fellow} is assigned to {rotation_name} in {month}")
+            if fellow in board_exam_set and month == october_month_key(start_year) and rotation_name in {"consult", "cath", "pcicu"}:
+                board_exam_rotation_errors.append(f"{fellow} is assigned to {rotation_name} in {month}")
+            if pgy_years.get(fellow) == "PGY-4" and month < december_month_key(start_year) and rotation_name == "pcicu":
+                first_year_pcicu_errors.append(f"{fellow} is assigned to PCICU in {month}")
 
         fellow_pgy = pgy_years.get(fellow)
         if fellow_pgy in PGY_ROTATION_TARGETS:
@@ -204,6 +212,16 @@ def build_validation(
         "ok": len(february_rotation_errors) == 0,
         "label": "February CHOP Conference rotation limits",
         "detail": "First-year fellows avoid consult, cath, and PCICU in February." if not february_rotation_errors else " | ".join(february_rotation_errors[:3]),
+    })
+    checks.append({
+        "ok": len(board_exam_rotation_errors) == 0,
+        "label": "October board exam rotation limits",
+        "detail": "Board-exam fellows avoid consult, cath, and PCICU in October." if not board_exam_rotation_errors else " | ".join(board_exam_rotation_errors[:3]),
+    })
+    checks.append({
+        "ok": len(first_year_pcicu_errors) == 0,
+        "label": "First-year PCICU timing",
+        "detail": "First-year fellows are not assigned to PCICU before December." if not first_year_pcicu_errors else " | ".join(first_year_pcicu_errors[:3]),
     })
 
     current = start_date

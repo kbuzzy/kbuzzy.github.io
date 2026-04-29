@@ -13,7 +13,9 @@ import {
   completeHolidayPreferenceRankings,
   createRandomPreferenceState,
   expandDateRanges,
+  exportScheduleRequestsCsv,
   getCallType,
+  importScheduleRequestsCsv,
   listCandidateVacationWeeks,
   serializeConferenceBlocks,
 } from "./schedule";
@@ -151,6 +153,31 @@ describe("createRandomPreferenceState", () => {
   });
 });
 
+describe("scheduling request CSV import/export", () => {
+  test("round-trips vacation, call-avoid, board, holiday preference, and exception-month inputs", () => {
+    const preferences = createRandomPreferenceState(INITIAL_ROSTER);
+    const csv = exportScheduleRequestsCsv({
+      roster: INITIAL_ROSTER,
+      vacations: { f1: [{ from: "07/06/2026", to: "07/10/2026" }] },
+      callAvoidRequests: { f1: [{ from: "07/13/2026", to: "07/13/2026" }] },
+      boardExamIds: ["f1"],
+      holidayPreferences: preferences,
+      pcicuExceptionMonths: ["2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05"],
+      majorHolidayBlocks: createDefaultMajorHolidayBlocks(),
+      conferenceBlocks: createDefaultConferenceBlocks(),
+    });
+
+    const imported = importScheduleRequestsCsv(csv, INITIAL_ROSTER);
+
+    expect(imported.vacations.f1[0]).toEqual({ from: "07/06/2026", to: "07/10/2026" });
+    expect(imported.callAvoidRequests.f1[0]).toEqual({ from: "07/13/2026", to: "07/13/2026" });
+    expect(imported.boardExamIds).toContain("f1");
+    expect(imported.pcicuExceptionMonths).toHaveLength(6);
+    expect(imported.holidayPreferences.f1.majorHolidays.important.length).toBeGreaterThan(0);
+    expect(imported.holidayPreferences.f1.majorHolidays.neutral.length).toBeGreaterThan(0);
+  });
+});
+
 describe("buildRequestSummary", () => {
   test("reports satisfied and unmet requests with explanations", () => {
     const summary = buildRequestSummary({
@@ -204,7 +231,7 @@ describe("buildRequestSummary", () => {
     const deepthi = summary.find((item) => item.fellow === "Deepthi");
     expect(deepthi.satisfied.some((item) => item.includes("Vacation week 1"))).toBe(true);
     expect(deepthi.unmet.some((item) => item.label.includes("Call-avoid request 1"))).toBe(true);
-    expect(deepthi.unmet.some((item) => item.label.includes("October board-exam request"))).toBe(true);
+    expect(deepthi.unmet.some((item) => item.label.includes("October board-exam rotation protection"))).toBe(true);
     expect(deepthi.unmet.some((item) => item.label.includes("Holiday weekend preference"))).toBe(true);
   });
 });
