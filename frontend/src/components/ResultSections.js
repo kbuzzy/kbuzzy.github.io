@@ -392,9 +392,10 @@ export function RulesValidationTab({ checks, error }) {
     {
       title: "Holiday Preferences",
       items: [
-        "Each fellow ranks Thanksgiving, Christmas, and New Year's from most preferred to work to least preferred to work.",
-        "Each fellow also ranks the six holiday weekends from most preferred to work to least preferred to work.",
-        "The solver uses those rankings as a soft preference objective.",
+        "Each fellow can prioritize the major holidays and holiday weekends they care about most.",
+        "Neutral holidays are still included in the final ranking after priorities.",
+        "Neutral rankings are automatically ordered to reduce conflicts with other fellows' priority requests.",
+        "The solver uses the completed rankings as a soft preference objective.",
         "Preference satisfaction is weighted by seniority: PGY-6 over PGY-5 over PGY-4.",
       ],
     },

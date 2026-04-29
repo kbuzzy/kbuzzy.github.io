@@ -9,7 +9,7 @@ export const DATE_FMT = "MM/DD/YYYY";
 export const MAX_VACATION_WEEKS = 4;
 export const MAX_CALL_AVOID_REQUESTS = 8;
 export const STORAGE_KEY = "fellowship-scheduler-state";
-export const STORAGE_VERSION = 3;
+export const STORAGE_VERSION = 4;
 export const DEFAULT_RETRY_MAX_ATTEMPTS = 8;
 export const CURRENT_ACADEMIC_YEAR_CONFIG = {
   startYear: 2026,
@@ -87,6 +87,8 @@ export const PGY_ROTATION_TARGETS = {
   "PGY-5": { consult: 2, pcicu: 1, cath: 1, imaging: 3, research: 4, achd_ep: 1 },
   "PGY-6": { consult: 1, pcicu: 1, cath: 1, imaging: 1, research: 7, achd_ep: 1 },
 };
+
+export const PGY_PREFERENCE_WEIGHTS = { "PGY-4": 1, "PGY-5": 3, "PGY-6": 6 };
 
 export const HOLIDAY_WEEKENDS = CURRENT_ACADEMIC_YEAR_CONFIG.holidayWeekends;
 

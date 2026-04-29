@@ -5,6 +5,7 @@ from .constants import (
     DEFAULT_CONFERENCE_BLOCKS,
     DEFAULT_MAJOR_HOLIDAYS,
     HOLIDAY_WEEKENDS,
+    PGY_PREFERENCE_WEIGHTS,
     PGY_ROTATION_TARGETS,
     PGY_WEEKEND_TARGETS,
     REQUIRED_PGY_COUNTS,
@@ -80,6 +81,80 @@ def normalize_conference_blocks(conference_blocks: dict | None) -> dict[str, dic
     return normalized
 
 
+def _preference_parts(preference_value, expected: set[str], label: str) -> tuple[list[str], list[str]]:
+    if isinstance(preference_value, list):
+        if set(preference_value) != expected or len(preference_value) != len(expected):
+            raise ValueError(f"must rank each {label} exactly once")
+        return list(preference_value), []
+
+    if not isinstance(preference_value, dict):
+        raise ValueError(f"{label} preferences must be a ranked list or important/neutral groups")
+
+    important = list(preference_value.get("important", []))
+    neutral = list(preference_value.get("neutral", []))
+    combined = important + neutral
+    if set(combined) != expected or len(combined) != len(expected):
+        raise ValueError(f"must include each {label} exactly once across important and neutral")
+    if set(important).intersection(neutral):
+        raise ValueError(f"{label} preferences cannot repeat between important and neutral")
+    return important, neutral
+
+
+def _optimized_ranking(
+    fellow: str,
+    fellows: list[str],
+    pgy_years: dict[str, str],
+    parts_by_fellow: dict[str, tuple[list[str], list[str]]],
+    option_count: int,
+) -> list[str]:
+    important, neutral = parts_by_fellow[fellow]
+    external_demand: dict[str, int] = {}
+    for other in fellows:
+        if other == fellow:
+            continue
+        other_important, _ = parts_by_fellow[other]
+        seniority_weight = PGY_PREFERENCE_WEIGHTS[pgy_years[other]]
+        for pref_idx, option in enumerate(other_important):
+            external_demand[option] = external_demand.get(option, 0) + seniority_weight * (option_count - pref_idx)
+
+    neutral_order = {option: idx for idx, option in enumerate(neutral)}
+    optimized_neutral = sorted(
+        neutral,
+        key=lambda option: (external_demand.get(option, 0), neutral_order[option]),
+    )
+    return important + optimized_neutral
+
+
+def normalize_holiday_preferences(
+    fellows: list[str],
+    pgy_years: dict[str, str],
+    holiday_preferences: dict[str, dict],
+    major_holidays: dict[str, list[dict[str, str]]],
+) -> dict[str, dict[str, list[str]]]:
+    expected_major = set(major_holidays)
+    expected_weekends = {info["label"] for info in HOLIDAY_WEEKENDS.values()}
+    major_parts: dict[str, tuple[list[str], list[str]]] = {}
+    weekend_parts: dict[str, tuple[list[str], list[str]]] = {}
+
+    for fellow in fellows:
+        prefs = holiday_preferences.get(fellow)
+        if not prefs:
+            raise ValueError(f"missing holiday preferences for {fellow}")
+        try:
+            major_parts[fellow] = _preference_parts(prefs.get("majorHolidays", []), expected_major, "major holiday")
+            weekend_parts[fellow] = _preference_parts(prefs.get("holidayWeekends", []), expected_weekends, "holiday weekend")
+        except ValueError as exc:
+            raise ValueError(f"{fellow} {exc}") from exc
+
+    return {
+        fellow: {
+            "majorHolidays": _optimized_ranking(fellow, fellows, pgy_years, major_parts, len(expected_major)),
+            "holidayWeekends": _optimized_ranking(fellow, fellows, pgy_years, weekend_parts, len(expected_weekends)),
+        }
+        for fellow in fellows
+    }
+
+
 def validate_schedule_inputs(
     fellows: list[str],
     start_date: datetime,
@@ -89,7 +164,7 @@ def validate_schedule_inputs(
     major_holiday_blocks: dict | None,
     conference_blocks: dict | None,
     pcicu_exception_months: list[str],
-) -> tuple[dict[str, list[dict[str, str]]], dict[str, dict[str, str]], set[str]]:
+) -> tuple[dict[str, list[dict[str, str]]], dict[str, dict[str, str]], set[str], dict[str, dict[str, list[str]]]]:
     if len(fellows) != 6:
         raise ValueError("the schedule must include exactly 6 fellows")
     start_year = academic_year_start_year(start_date, end_date)
@@ -125,20 +200,9 @@ def validate_schedule_inputs(
     if chop_start.strftime("%Y-%m") != f"{start_year + 1}-02" or chop_end.strftime("%Y-%m") != f"{start_year + 1}-02":
         raise ValueError("CHOP Conference dates must fall within February of the academic year")
 
-    expected_major = set(major_holidays)
-    expected_weekends = {info["label"] for info in HOLIDAY_WEEKENDS.values()}
-    for fellow in fellows:
-        prefs = holiday_preferences.get(fellow)
-        if not prefs:
-            raise ValueError(f"missing holiday preferences for {fellow}")
-        major_list = prefs.get("majorHolidays", [])
-        weekend_list = prefs.get("holidayWeekends", [])
-        if set(major_list) != expected_major or len(major_list) != len(expected_major):
-            raise ValueError(f"{fellow} must rank each major holiday exactly once")
-        if set(weekend_list) != expected_weekends or len(weekend_list) != len(expected_weekends):
-            raise ValueError(f"{fellow} must rank each holiday weekend exactly once")
+    normalized_preferences = normalize_holiday_preferences(fellows, pgy_years, holiday_preferences, major_holidays)
 
-    return major_holidays, conference_windows, exception_tuesday_months
+    return major_holidays, conference_windows, exception_tuesday_months, normalized_preferences
 
 
 def build_call_blocks(start_date: datetime, end_date: datetime, major_holidays: dict[str, list[dict[str, str]]]) -> dict:

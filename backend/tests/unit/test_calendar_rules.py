@@ -8,12 +8,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scheduler_engine.calendar_rules import build_call_blocks, normalize_major_holidays, validate_schedule_inputs
+from scheduler_engine.calendar_rules import build_call_blocks, normalize_holiday_preferences, normalize_major_holidays, validate_schedule_inputs
 
 
 class CalendarRulesTests(unittest.TestCase):
     def test_validate_schedule_inputs_uses_default_exception_months(self):
-        major_holidays, _, exception_months = validate_schedule_inputs(
+        major_holidays, _, exception_months, _ = validate_schedule_inputs(
             fellows=["A", "B", "C", "D", "E", "F"],
             start_date=datetime.strptime("07/01/2026", "%m/%d/%Y"),
             end_date=datetime.strptime("06/30/2027", "%m/%d/%Y"),
@@ -39,6 +39,40 @@ class CalendarRulesTests(unittest.TestCase):
 
         self.assertEqual(exception_months, {"2026-08", "2026-11", "2027-01", "2027-02", "2027-04", "2027-05"})
         self.assertEqual(set(major_holidays), {"Thanksgiving", "Christmas", "New Year's"})
+
+    def test_neutral_holiday_preferences_are_optimized_around_priority_requests(self):
+        fellows = ["A", "B", "C", "D", "E", "F"]
+        pgy_years = {
+            "A": "PGY-4",
+            "B": "PGY-4",
+            "C": "PGY-5",
+            "D": "PGY-5",
+            "E": "PGY-6",
+            "F": "PGY-6",
+        }
+        major_holidays = normalize_major_holidays(None)
+        preferences = {
+            fellow: {
+                "majorHolidays": {
+                    "important": [],
+                    "neutral": ["Thanksgiving", "Christmas", "New Year's"],
+                },
+                "holidayWeekends": {
+                    "important": [],
+                    "neutral": ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"],
+                },
+            }
+            for fellow in fellows
+        }
+        preferences["A"]["holidayWeekends"] = {
+            "important": ["July 4"],
+            "neutral": ["Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"],
+        }
+
+        normalized = normalize_holiday_preferences(fellows, pgy_years, preferences, major_holidays)
+
+        self.assertEqual(normalized["A"]["holidayWeekends"][0], "July 4")
+        self.assertEqual(normalized["B"]["holidayWeekends"][-1], "July 4")
 
     def test_validate_schedule_inputs_rejects_invalid_holiday_ranking(self):
         with self.assertRaises(ValueError):

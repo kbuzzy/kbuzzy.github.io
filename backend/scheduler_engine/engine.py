@@ -39,7 +39,7 @@ def generate_schedule(
 ) -> dict:
     del holidays
 
-    major_holidays, conference_windows, exception_tuesday_months = validate_schedule_inputs(
+    major_holidays, conference_windows, exception_tuesday_months, normalized_holiday_preferences = validate_schedule_inputs(
         fellows,
         start_date,
         end_date,
@@ -259,7 +259,7 @@ def generate_schedule(
     for fellow in fellows:
         fellow_idx = fellows.index(fellow)
         seniority_weight = PGY_PREFERENCE_WEIGHTS[pgy_years[fellow]]
-        prefs = holiday_preferences[fellow]
+        prefs = normalized_holiday_preferences[fellow]
 
         major_scores = {
             label: len(prefs["majorHolidays"]) - pref_idx

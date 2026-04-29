@@ -10,6 +10,8 @@ import {
   createDefaultConferenceBlocks,
   createTypicalVacations,
   createTestCallAvoidRequests,
+  completeHolidayPreferenceRankings,
+  createRandomPreferenceState,
   expandDateRanges,
   getCallType,
   listCandidateVacationWeeks,
@@ -95,6 +97,54 @@ describe("createTestCallAvoidRequests", () => {
       });
       expect(flattened.some((range) => range.from === range.to)).toBe(true);
       expect(flattened.some((range) => range.from !== range.to)).toBe(true);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+});
+
+describe("completeHolidayPreferenceRankings", () => {
+  test("moves neutral holidays with external priority demand later in the completed ranking", () => {
+    const preferences = Object.fromEntries(
+      INITIAL_ROSTER.map((fellow) => [
+        fellow.id,
+        {
+          majorHolidays: {
+            important: [],
+            neutral: ["Thanksgiving", "Christmas", "New Year's"],
+          },
+          holidayWeekends: {
+            important: [],
+            neutral: ["July 4", "Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"],
+          },
+        },
+      ]),
+    );
+    preferences.f1.holidayWeekends = {
+      important: ["July 4"],
+      neutral: ["Labor Day", "MLK Day", "Good Friday", "Memorial Day", "Juneteenth"],
+    };
+
+    const completed = completeHolidayPreferenceRankings(INITIAL_ROSTER, preferences);
+
+    expect(completed.f1.holidayWeekends[0]).toBe("July 4");
+    expect(completed.f2.holidayWeekends[completed.f2.holidayWeekends.length - 1]).toBe("July 4");
+  });
+});
+
+describe("createRandomPreferenceState", () => {
+  test("creates important and neutral preferences for every fellow in built-in tests", () => {
+    const randomSpy = jest.spyOn(Math, "random").mockReturnValue(0.5);
+
+    try {
+      const preferences = createRandomPreferenceState(INITIAL_ROSTER);
+
+      INITIAL_ROSTER.forEach((fellow) => {
+        expect(preferences[fellow.id].majorHolidays.important.length).toBeGreaterThan(0);
+        expect(preferences[fellow.id].majorHolidays.neutral.length).toBeGreaterThan(0);
+        expect(preferences[fellow.id].holidayWeekends.important.length).toBeGreaterThan(0);
+        expect(preferences[fellow.id].holidayWeekends.neutral.length).toBeGreaterThan(0);
+      });
     } finally {
       randomSpy.mockRestore();
     }

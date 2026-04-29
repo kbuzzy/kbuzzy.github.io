@@ -15,6 +15,7 @@ import { exportCalendarWorkbook } from "../utils/exportWorkbook";
 import {
   buildCalendarEvents,
   buildRequestSummary,
+  completeHolidayPreferenceRankings,
   createDefaultCallAvoidRequests,
   createDefaultConferenceBlocks,
   createDefaultMajorHolidayBlocks,
@@ -83,13 +84,14 @@ export function buildSummaryForSolvedRun({
   conferenceBlocks,
   data,
 }) {
+  const completedPreferences = completeHolidayPreferenceRankings(roster, holidayPreferences);
   return safeBuildRequestSummary({
     start,
     roster,
     vacations,
     callAvoidRequests,
     boardExamIds,
-    holidayPreferences,
+    holidayPreferences: completedPreferences,
     conferenceBlocks,
     schedule: data.schedule || [],
     rotations: data.rotations || [],
@@ -150,7 +152,7 @@ export function useScheduler() {
       vacations,
       callAvoidRequests,
       boardExamIds,
-      holidayPreferences,
+      holidayPreferences: completeHolidayPreferenceRankings(roster, holidayPreferences),
       conferenceBlocks,
       schedule,
       rotations,

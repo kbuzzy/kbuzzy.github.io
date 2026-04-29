@@ -45,7 +45,7 @@ class ScheduleRequest(BaseModel):
     holidays: Optional[dict[str, list[str]]] = Field(default_factory=dict)
     pgy_years: dict[str, str]
     board_exam_fellows: Optional[list[str]] = Field(default_factory=list)
-    holiday_preferences: dict[str, dict[str, list[str]]]
+    holiday_preferences: dict[str, dict]
     major_holiday_blocks: Optional[dict[str, list[dict[str, str]]]] = None
     conference_blocks: Optional[dict[str, dict[str, str]]] = None
     pcicu_exception_months: list[str]

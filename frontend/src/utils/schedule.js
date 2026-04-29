@@ -10,6 +10,7 @@ import {
   MAJOR_HOLIDAYS,
   MAX_VACATION_WEEKS,
   PALETTE,
+  PGY_PREFERENCE_WEIGHTS,
   ROTATION_LABELS,
   STORAGE_KEY,
   STORAGE_VERSION,
@@ -270,8 +271,69 @@ export function createDefaultPreferenceState() {
     INITIAL_ROSTER.map((fellow) => [
       fellow.id,
       {
-        majorHolidays: [...MAJOR_HOLIDAYS],
-        holidayWeekends: [...HOLIDAY_WEEKEND_OPTIONS],
+        majorHolidays: {
+          important: [],
+          neutral: [...MAJOR_HOLIDAYS],
+        },
+        holidayWeekends: {
+          important: [],
+          neutral: [...HOLIDAY_WEEKEND_OPTIONS],
+        },
+      },
+    ]),
+  );
+}
+
+function preferenceParts(preferenceValue, options) {
+  if (Array.isArray(preferenceValue)) {
+    return {
+      important: preferenceValue.filter((item) => options.includes(item)),
+      neutral: options.filter((item) => !preferenceValue.includes(item)),
+    };
+  }
+  const important = Array.isArray(preferenceValue?.important)
+    ? preferenceValue.important.filter((item) => options.includes(item))
+    : [];
+  const neutral = Array.isArray(preferenceValue?.neutral)
+    ? preferenceValue.neutral.filter((item) => options.includes(item) && !important.includes(item))
+    : [];
+  return {
+    important,
+    neutral: [
+      ...neutral,
+      ...options.filter((item) => !important.includes(item) && !neutral.includes(item)),
+    ],
+  };
+}
+
+function optimizedPreferenceList(fellow, roster, preferences, key, options) {
+  const partsByFellow = Object.fromEntries(
+    roster.map((item) => [item.id, preferenceParts(preferences?.[item.id]?.[key], options)]),
+  );
+  const currentParts = partsByFellow[fellow.id];
+  const demand = {};
+  roster.forEach((other) => {
+    if (other.id === fellow.id) return;
+    const weight = PGY_PREFERENCE_WEIGHTS[other.pgy] || 1;
+    partsByFellow[other.id].important.forEach((option, index) => {
+      demand[option] = (demand[option] || 0) + weight * (options.length - index);
+    });
+  });
+  const neutralOrder = Object.fromEntries(currentParts.neutral.map((option, index) => [option, index]));
+  const optimizedNeutral = [...currentParts.neutral].sort((left, right) => (
+    (demand[left] || 0) - (demand[right] || 0)
+      || neutralOrder[left] - neutralOrder[right]
+  ));
+  return [...currentParts.important, ...optimizedNeutral];
+}
+
+export function completeHolidayPreferenceRankings(roster, preferences) {
+  return Object.fromEntries(
+    roster.map((fellow) => [
+      fellow.id,
+      {
+        majorHolidays: optimizedPreferenceList(fellow, roster, preferences, "majorHolidays", MAJOR_HOLIDAYS),
+        holidayWeekends: optimizedPreferenceList(fellow, roster, preferences, "holidayWeekends", HOLIDAY_WEEKEND_OPTIONS),
       },
     ]),
   );
@@ -394,15 +456,31 @@ export function createTypicalVacations(roster, start, end, majorHolidayBlocks) {
   );
 }
 
+function randomImportantSubset(options) {
+  if (options.length <= 1) return [...options];
+  const count = 1 + Math.floor(Math.random() * (options.length - 1));
+  return sample(options, count);
+}
+
 export function createRandomPreferenceState(roster) {
   return Object.fromEntries(
-    roster.map((fellow) => [
-      fellow.id,
-      {
-        majorHolidays: shuffle(MAJOR_HOLIDAYS),
-        holidayWeekends: shuffle(HOLIDAY_WEEKEND_OPTIONS),
-      },
-    ]),
+    roster.map((fellow) => {
+      const majorImportant = randomImportantSubset(MAJOR_HOLIDAYS);
+      const weekendImportant = randomImportantSubset(HOLIDAY_WEEKEND_OPTIONS);
+      return [
+        fellow.id,
+        {
+          majorHolidays: {
+            important: majorImportant,
+            neutral: MAJOR_HOLIDAYS.filter((item) => !majorImportant.includes(item)),
+          },
+          holidayWeekends: {
+            important: weekendImportant,
+            neutral: HOLIDAY_WEEKEND_OPTIONS.filter((item) => !weekendImportant.includes(item)),
+          },
+        },
+      ];
+    }),
   );
 }
 

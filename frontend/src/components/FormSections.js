@@ -1,7 +1,7 @@
 import React from "react";
 import moment from "moment";
 
-import { DATE_FMT, MAX_CALL_AVOID_REQUESTS, MAX_VACATION_WEEKS } from "../config/schedule";
+import { DATE_FMT, HOLIDAY_WEEKEND_OPTIONS, MAJOR_HOLIDAYS, MAX_CALL_AVOID_REQUESTS, MAX_VACATION_WEEKS } from "../config/schedule";
 import { btnStyle, dangerButtonStyle, inputStyle, labelStyle } from "../styles/ui";
 import {
   createDefaultMajorHolidayBlocks,
@@ -292,7 +292,49 @@ export function CollapsibleSection({ title, summary, defaultOpen = false, childr
   );
 }
 
-function PreferenceRankingCard({ title, items, onMove }) {
+function preferenceParts(preferenceSet, key, options) {
+  const value = preferenceSet?.[key];
+  if (Array.isArray(value)) {
+    return {
+      important: value.filter((item) => options.includes(item)),
+      neutral: options.filter((item) => !value.includes(item)),
+    };
+  }
+  const important = Array.isArray(value?.important)
+    ? value.important.filter((item) => options.includes(item))
+    : [];
+  const neutral = Array.isArray(value?.neutral)
+    ? value.neutral.filter((item) => options.includes(item) && !important.includes(item))
+    : [];
+  return {
+    important,
+    neutral: [
+      ...neutral,
+      ...options.filter((item) => !important.includes(item) && !neutral.includes(item)),
+    ],
+  };
+}
+
+function PreferenceRankingCard({ title, parts, onChange }) {
+  const moveToImportant = (item) => {
+    onChange({
+      important: [...parts.important, item],
+      neutral: parts.neutral.filter((entry) => entry !== item),
+    });
+  };
+  const moveToNeutral = (item) => {
+    onChange({
+      important: parts.important.filter((entry) => entry !== item),
+      neutral: [...parts.neutral, item],
+    });
+  };
+  const moveImportant = (index, direction) => {
+    onChange({
+      ...parts,
+      important: moveItem(parts.important, index, direction),
+    });
+  };
+
   return (
     <div
       style={{
@@ -304,10 +346,16 @@ function PreferenceRankingCard({ title, items, onMove }) {
     >
       <div style={{ fontWeight: 600, marginBottom: 8 }}>{title}</div>
       <div style={{ fontSize: 12, color: "#777", marginBottom: 10 }}>
-        Top = most preferred to work, bottom = least preferred to work
+        Prioritized holidays keep this order. Neutral holidays are automatically ordered after priorities to reduce conflicts.
       </div>
-      <div style={{ display: "grid", gap: 8 }}>
-        {items.map((item, index) => (
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#344054", marginBottom: 6 }}>Important</div>
+      <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+        {parts.important.length === 0 && (
+          <div style={{ color: "#667085", fontSize: 13, border: "1px dashed #d0d7de", borderRadius: 6, padding: "8px 10px" }}>
+            No specific priority requests.
+          </div>
+        )}
+        {parts.important.map((item, index) => (
           <div
             key={item}
             style={{
@@ -324,20 +372,52 @@ function PreferenceRankingCard({ title, items, onMove }) {
             <span>{item}</span>
             <div style={{ display: "flex", gap: 6 }}>
               <button
-                onClick={() => onMove(index, -1)}
+                onClick={() => moveImportant(index, -1)}
                 disabled={index === 0}
                 style={{ ...btnStyle, padding: "4px 8px", opacity: index === 0 ? 0.45 : 1 }}
               >
                 Up
               </button>
               <button
-                onClick={() => onMove(index, 1)}
-                disabled={index === items.length - 1}
-                style={{ ...btnStyle, padding: "4px 8px", opacity: index === items.length - 1 ? 0.45 : 1 }}
+                onClick={() => moveImportant(index, 1)}
+                disabled={index === parts.important.length - 1}
+                style={{ ...btnStyle, padding: "4px 8px", opacity: index === parts.important.length - 1 ? 0.45 : 1 }}
               >
                 Down
               </button>
+              <button
+                onClick={() => moveToNeutral(item)}
+                style={{ ...btnStyle, background: "#6c757d", padding: "4px 8px" }}
+              >
+                Neutral
+              </button>
             </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#344054", marginBottom: 6 }}>Neutral</div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {parts.neutral.map((item) => (
+          <div
+            key={item}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 10,
+              alignItems: "center",
+              border: "1px solid #ececec",
+              borderRadius: 6,
+              padding: "8px 10px",
+              background: "#fafafa",
+            }}
+          >
+            <span>{item}</span>
+            <button
+              onClick={() => moveToImportant(item)}
+              style={{ ...btnStyle, padding: "4px 8px" }}
+            >
+              Prioritize
+            </button>
           </div>
         ))}
       </div>
@@ -351,12 +431,14 @@ export function HolidayPreferenceEditor({ roster, preferences, onUpdate }) {
       <label style={labelStyle}>
         Holiday Work Preferences
         <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: "#777" }}>
-          Rank from most preferred to work to least preferred to work
+          Prioritize holidays that matter; neutral holidays are still ranked automatically
         </span>
       </label>
       <div style={{ display: "grid", gap: 12 }}>
         {roster.map((fellow) => {
           const preferenceSet = preferences[fellow.id];
+          const majorParts = preferenceParts(preferenceSet, "majorHolidays", MAJOR_HOLIDAYS);
+          const weekendParts = preferenceParts(preferenceSet, "holidayWeekends", HOLIDAY_WEEKEND_OPTIONS);
           return (
             <div
               key={fellow.id}
@@ -380,21 +462,21 @@ export function HolidayPreferenceEditor({ roster, preferences, onUpdate }) {
               >
                 <PreferenceRankingCard
                   title="Major Holidays"
-                  items={preferenceSet.majorHolidays}
-                  onMove={(index, direction) =>
+                  parts={majorParts}
+                  onChange={(nextParts) =>
                     onUpdate(fellow.id, {
                       ...preferenceSet,
-                      majorHolidays: moveItem(preferenceSet.majorHolidays, index, direction),
+                      majorHolidays: nextParts,
                     })
                   }
                 />
                 <PreferenceRankingCard
                   title="Holiday Weekends"
-                  items={preferenceSet.holidayWeekends}
-                  onMove={(index, direction) =>
+                  parts={weekendParts}
+                  onChange={(nextParts) =>
                     onUpdate(fellow.id, {
                       ...preferenceSet,
-                      holidayWeekends: moveItem(preferenceSet.holidayWeekends, index, direction),
+                      holidayWeekends: nextParts,
                     })
                   }
                 />
