@@ -11,7 +11,7 @@ import {
   STORAGE_KEY,
   STORAGE_VERSION,
 } from "../config/schedule";
-import { exportCalendarWorkbook } from "../utils/exportWorkbook";
+import { exportCalendarWorkbook, exportScheduleComparisonWorkbook } from "../utils/exportWorkbook";
 import {
   buildCalendarEvents,
   buildRequestSummary,
@@ -263,6 +263,7 @@ export function useScheduler() {
   const [loadingMode, setLoadingMode] = useState({ kind: "generate", attempt: 1, totalAttempts: 1 });
   const [error, setError] = useState(null);
   const [testResult, setTestResult] = useState(storedState?.testResult || null);
+  const [validGeneratedVersions, setValidGeneratedVersions] = useState([]);
   const [calendarDate, setCalendarDate] = useState(() => moment(defaultWindow.start, DATE_FMT).toDate());
   const [activeTab, setActiveTab] = useState("scheduler");
   const [backendStatus, setBackendStatus] = useState(storedState?.backendStatus || (API_URL ? "error" : "unconfigured"));
@@ -559,6 +560,7 @@ export function useScheduler() {
         data,
         nextValidation,
         validationPassed,
+        requestSummary: requestSummaryForAttempt,
         requestScore: requestSummaryScore(requestSummaryForAttempt),
         validationScore: validationScore(nextValidation),
         attempt,
@@ -587,6 +589,7 @@ export function useScheduler() {
       totalAttempts,
       attemptsUsed: attempts.length,
       validAttempts: validAttempts.length,
+      validGeneratedVersions: validAttempts,
       generatedTargetMet: validAttempts.length >= 3,
     };
   }, [buildSchedulePayload, conferenceBlocks, end, majorHolidayBlocks, maxRetryAttempts, requestSchedule, roster, start]);
@@ -648,6 +651,7 @@ export function useScheduler() {
       if (activeRunIdRef.current !== runId) {
         return;
       }
+      setValidGeneratedVersions(result.validGeneratedVersions || []);
       setVacations(result.vacationsById || vacations);
       applySolvedResult(result.data, result.nextValidation);
       if (!result.validationPassed) {
@@ -796,6 +800,7 @@ export function useScheduler() {
         selectedExceptionMonths: randomExceptionMonths,
       });
       setBackendStatus("connected");
+      setValidGeneratedVersions(result.validGeneratedVersions || []);
       setVacations(result.vacationsById || randomVacations);
       setTestResult(await finalizeTestResult(
         "Run Random Test",
@@ -872,6 +877,7 @@ export function useScheduler() {
         selectedPreferences: typicalPreferences,
         selectedExceptionMonths: typicalExceptionMonths,
       });
+      setValidGeneratedVersions(result.validGeneratedVersions || []);
       setVacations(result.vacationsById || typicalVacations);
       const nextResult = await finalizeTestResult(
         "Run Typical Schedule Test",
@@ -950,6 +956,10 @@ export function useScheduler() {
     },
   ), [boardExamIds, callAvoidRequests, conferenceBlocks, end, holidayPreferences, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, requestSummary, roster, schedule, start, vacations]);
 
+  const exportValidGeneratedVersions = useCallback(() => (
+    exportScheduleComparisonWorkbook(validGeneratedVersions)
+  ), [validGeneratedVersions]);
+
   const exportSchedulingRequests = useCallback(() => {
     const csv = exportScheduleRequestsCsv({
       roster,
@@ -981,6 +991,7 @@ export function useScheduler() {
       setHolidayWeekends([]);
       setMajorHolidays([]);
       setValidation([]);
+      setValidGeneratedVersions([]);
       setTestResult(null);
       setError(null);
     } catch (err) {
@@ -1012,6 +1023,7 @@ export function useScheduler() {
     setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: 1 });
     setError(null);
     setTestResult(null);
+    setValidGeneratedVersions([]);
     setCalendarDate(moment(defaultWindow.start, DATE_FMT).toDate());
     setActiveTab("scheduler");
     setRetryUntilValid(false);
@@ -1033,6 +1045,7 @@ export function useScheduler() {
     error,
     events,
     exportWorkbook,
+    exportValidGeneratedVersions,
     exportSchedulingRequests,
     generateSchedule,
     holidayPreferences,
@@ -1070,6 +1083,7 @@ export function useScheduler() {
     start,
     testResult,
     validation,
+    validGeneratedVersions,
     vacations,
   };
 }

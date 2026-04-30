@@ -59,6 +59,7 @@ export default function App() {
     end,
     error,
     events,
+    exportValidGeneratedVersions,
     exportWorkbook,
     exportSchedulingRequests,
     generateSchedule,
@@ -95,6 +96,7 @@ export default function App() {
     start,
     testResult,
     validation,
+    validGeneratedVersions,
     vacations,
   } = useScheduler();
 
@@ -426,6 +428,13 @@ export default function App() {
                     style={{ ...btnStyle, background: "#c0392b", opacity: loading ? 0.6 : 1 }}
                   >
                     Reset saved state
+                  </button>
+                  <button
+                    onClick={exportValidGeneratedVersions}
+                    disabled={loading || !validGeneratedVersions.length}
+                    style={{ ...btnStyle, background: "#475467", opacity: loading || !validGeneratedVersions.length ? 0.6 : 1 }}
+                  >
+                    Export valid versions
                   </button>
                 </div>
                 <div

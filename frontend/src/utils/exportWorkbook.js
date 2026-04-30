@@ -232,6 +232,125 @@ function buildSchedulingRequestsSheet(workbook, requestInputs) {
   });
 }
 
+function buildComparisonOverviewSheet(workbook, versions) {
+  const sheet = workbook.addWorksheet("Comparison Overview");
+  sheet.columns = [
+    { width: 14 },
+    { width: 18 },
+    { width: 18 },
+    { width: 18 },
+    { width: 20 },
+  ];
+  const headers = ["Version", "Attempt", "Request Score", "Validation Score", "Vacation Alternatives"];
+  headers.forEach((header, index) => {
+    const cell = sheet.getRow(1).getCell(index + 1);
+    cell.value = header;
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+    styleCalendarCell(cell);
+  });
+  versions.forEach((version, index) => {
+    const row = sheet.getRow(index + 2);
+    row.getCell(1).value = `Version ${index + 1}`;
+    row.getCell(2).value = version.attempt;
+    row.getCell(3).value = version.requestScore;
+    row.getCell(4).value = version.validationScore;
+    row.getCell(5).value = version.vacationFallbacks?.length || 0;
+    for (let col = 1; col <= 5; col += 1) styleCalendarCell(row.getCell(col));
+  });
+}
+
+function buildUnfulfilledRequestsSheet(workbook, versions) {
+  const sheet = workbook.addWorksheet("Unfulfilled Requests");
+  sheet.columns = [
+    { width: 14 },
+    { width: 22 },
+    { width: 12 },
+    { width: 36 },
+    { width: 90 },
+  ];
+  const headers = ["Version", "Fellow", "PGY", "Request", "Reason"];
+  headers.forEach((header, index) => {
+    const cell = sheet.getRow(1).getCell(index + 1);
+    cell.value = header;
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+    styleCalendarCell(cell);
+  });
+
+  let rowIndex = 2;
+  versions.forEach((version, versionIndex) => {
+    (version.requestSummary || []).forEach((item) => {
+      (item.unmet || []).forEach((entry) => {
+        const row = sheet.getRow(rowIndex);
+        row.getCell(1).value = `Version ${versionIndex + 1}`;
+        row.getCell(2).value = item.fellow;
+        row.getCell(3).value = item.pgy;
+        row.getCell(4).value = entry?.label || "Request";
+        row.getCell(5).value = entry?.reason || "No explanation was provided.";
+        for (let col = 1; col <= 5; col += 1) styleCalendarCell(row.getCell(col));
+        rowIndex += 1;
+      });
+    });
+  });
+
+  if (rowIndex === 2) {
+    const row = sheet.getRow(rowIndex);
+    row.getCell(1).value = "All valid generated versions fulfilled every tracked request.";
+    styleCalendarCell(row.getCell(1));
+  }
+}
+
+function buildVersionScheduleSheet(workbook, version, versionIndex) {
+  const sheet = workbook.addWorksheet(`Version ${versionIndex + 1}`);
+  sheet.columns = [
+    { width: 16 },
+    { width: 22 },
+    { width: 22 },
+  ];
+  ["Date", "Fellow", "Call Type"].forEach((header, index) => {
+    const cell = sheet.getRow(1).getCell(index + 1);
+    cell.value = header;
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+    styleCalendarCell(cell);
+  });
+  (version.data?.schedule || []).forEach((item, index) => {
+    const row = sheet.getRow(index + 2);
+    row.getCell(1).value = item.date;
+    row.getCell(2).value = item.fellow;
+    row.getCell(3).value = item.call_type || "";
+    for (let col = 1; col <= 3; col += 1) styleCalendarCell(row.getCell(col));
+  });
+}
+
+export async function exportScheduleComparisonWorkbook(versions, options = {}) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Kilian Burke";
+  workbook.created = new Date();
+  const safeVersions = versions || [];
+
+  buildComparisonOverviewSheet(workbook, safeVersions);
+  buildUnfulfilledRequestsSheet(workbook, safeVersions);
+  safeVersions.forEach((version, index) => buildVersionScheduleSheet(workbook, version, index));
+
+  if (options.download !== false) {
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob(
+      [buffer],
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "fellowship_schedule_valid_versions.xlsx";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return workbook;
+}
+
 export async function exportCalendarWorkbook(
   schedule,
   startStr,
