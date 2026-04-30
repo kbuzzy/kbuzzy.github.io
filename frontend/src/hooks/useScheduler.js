@@ -956,7 +956,7 @@ export function useScheduler() {
         conferenceBlocks,
       },
     },
-  ), [boardExamIds, callAvoidRequests, conferenceBlocks, end, holidayPreferences, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, requestSummary, roster, schedule, start, vacations]);
+  ), [boardExamIds, callAvoidRequests, conferenceBlocks, end, holidayPreferences, holidayWeekends, majorHolidayBlocks, majorHolidays, pcicuExceptionMonths, requestSummary, roster, rotations, schedule, start, vacations]);
 
   const exportValidGeneratedVersions = useCallback(() => (
     exportScheduleComparisonWorkbook(validGeneratedVersions)
