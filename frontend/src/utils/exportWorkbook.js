@@ -213,6 +213,76 @@ function buildRequestSummarySheet(workbook, summary) {
   });
 }
 
+function buildRotationSheet(workbook, rotations) {
+  if (!rotations?.length) return;
+  const sheet = workbook.addWorksheet("Rotations");
+  sheet.columns = Array.from({ length: 14 }, () => ({ width: 16 }));
+  const fellows = [...new Set(rotations.map((item) => item.fellow))].sort();
+  const months = [...new Set(rotations.map((item) => item.month))].sort();
+  const rotationTypes = [...new Set(rotations.map((item) => item.rotation))].sort();
+  const byFellowMonth = new Map(rotations.map((item) => [`${item.fellow}::${item.month}`, item.rotation]));
+  const byRotationMonth = new Map();
+  rotations.forEach((item) => {
+    const key = `${item.rotation}::${item.month}`;
+    const current = byRotationMonth.get(key) || [];
+    current.push(item.fellow);
+    byRotationMonth.set(key, current);
+  });
+
+  let rowIndex = 1;
+  sheet.getRow(rowIndex).getCell(1).value = "Rotations By Block";
+  sheet.getRow(rowIndex).getCell(1).font = { bold: true, size: 13 };
+  rowIndex += 1;
+  ["Rotation", ...months].forEach((header, index) => {
+    const cell = sheet.getRow(rowIndex).getCell(index + 1);
+    cell.value = header;
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF66" } };
+    styleCalendarCell(cell);
+  });
+  rowIndex += 1;
+  rotationTypes.forEach((rotation) => {
+    const row = sheet.getRow(rowIndex);
+    row.getCell(1).value = rotation;
+    row.getCell(1).font = { bold: true };
+    styleCalendarCell(row.getCell(1));
+    months.forEach((month, monthIndex) => {
+      const cell = row.getCell(monthIndex + 2);
+      cell.value = (byRotationMonth.get(`${rotation}::${month}`) || []).join(", ");
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rotationFill(rotation) } };
+      styleCalendarCell(cell);
+    });
+    rowIndex += 1;
+  });
+
+  rowIndex += 2;
+  sheet.getRow(rowIndex).getCell(1).value = "Rotations By Fellow";
+  sheet.getRow(rowIndex).getCell(1).font = { bold: true, size: 13 };
+  rowIndex += 1;
+  ["Fellow", ...months].forEach((header, index) => {
+    const cell = sheet.getRow(rowIndex).getCell(index + 1);
+    cell.value = header;
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF66" } };
+    styleCalendarCell(cell);
+  });
+  rowIndex += 1;
+  fellows.forEach((fellow) => {
+    const row = sheet.getRow(rowIndex);
+    row.getCell(1).value = fellow;
+    row.getCell(1).font = { bold: true };
+    styleCalendarCell(row.getCell(1));
+    months.forEach((month, monthIndex) => {
+      const rotation = byFellowMonth.get(`${fellow}::${month}`) || "";
+      const cell = row.getCell(monthIndex + 2);
+      cell.value = rotation;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rotationFill(rotation) } };
+      styleCalendarCell(cell);
+    });
+    rowIndex += 1;
+  });
+}
+
 function buildSchedulingRequestsSheet(workbook, requestInputs) {
   if (!requestInputs) return;
   const sheet = workbook.addWorksheet("Scheduling Requests");
@@ -486,6 +556,7 @@ export async function exportCalendarWorkbook(
     majorHolidayAssignments,
     majorHolidayBlocks,
   );
+  buildRotationSheet(workbook, options.rotations);
   buildRequestSummarySheet(workbook, requestSummary);
   buildSchedulingRequestsSheet(workbook, options.requestInputs);
 

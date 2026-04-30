@@ -1,4 +1,4 @@
-import { exportScheduleComparisonWorkbook } from "./exportWorkbook";
+import { exportCalendarWorkbook, exportScheduleComparisonWorkbook } from "./exportWorkbook";
 
 describe("exportScheduleComparisonWorkbook", () => {
   test("includes overview, unmet requests, and one sheet per valid version", async () => {
@@ -47,5 +47,34 @@ describe("exportScheduleComparisonWorkbook", () => {
     expect(workbook.getWorksheet("Version 1").getCell("A3").value).toBe("Rotation Blocks");
     expect(workbook.getWorksheet("Version 1").getCell("B4").value).toBe("2026-07");
     expect(workbook.getWorksheet("Version 1").getCell("A9").value).toBe("Call Calendar");
+  });
+});
+
+describe("exportCalendarWorkbook", () => {
+  test("writes rotation assignments into the standard calendar export", async () => {
+    const workbook = await exportCalendarWorkbook(
+      [{ date: "07/01/2026", fellow: "Deepthi", call_type: "In-House Call" }],
+      "07/01/2026",
+      "07/31/2026",
+      [{ id: "f1", name: "Deepthi" }, { id: "f2", name: "Amitie" }],
+      {},
+      [],
+      [],
+      {},
+      [],
+      [],
+      {
+        download: false,
+        rotations: [
+          { month: "2026-07", fellow: "Deepthi", rotation: "imaging" },
+          { month: "2026-07", fellow: "Amitie", rotation: "consult" },
+        ],
+      },
+    );
+
+    expect(workbook.getWorksheet("Rotations")).toBeTruthy();
+    expect(workbook.getWorksheet("Rotations").getCell("A1").value).toBe("Rotations By Block");
+    expect(workbook.getWorksheet("Rotations").getCell("B2").value).toBe("2026-07");
+    expect(workbook.getWorksheet("Rotations").getCell("B9").value).toBe("consult");
   });
 });

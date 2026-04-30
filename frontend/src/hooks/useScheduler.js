@@ -721,6 +721,7 @@ export function useScheduler() {
       nextRequestSummary,
       {
         download: false,
+        rotations: data.rotations || [],
         requestInputs: {
           roster,
           vacations: vacationsForRun,
@@ -943,6 +944,7 @@ export function useScheduler() {
     pcicuExceptionMonths,
     requestSummary,
     {
+      rotations,
       requestInputs: {
         roster,
         vacations,
