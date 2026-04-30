@@ -164,6 +164,7 @@ def build_validation(
     for month in month_keys:
         consult_count = rotation_count_by_month_type.get(f"{month}::consult", 0)
         cath_count = rotation_count_by_month_type.get(f"{month}::cath", 0)
+        imaging_count = rotation_count_by_month_type.get(f"{month}::imaging", 0)
         pcicu_count = rotation_count_by_month_type.get(f"{month}::pcicu", 0)
         achd_count = rotation_count_by_month_type.get(f"{month}::achd_ep", 0)
         expected_pcicu = 0 if month in exception_month_set else 1
@@ -171,6 +172,8 @@ def build_validation(
             slot_count_errors.append(f"{month} has {consult_count} consult fellows")
         if cath_count != 1:
             slot_count_errors.append(f"{month} has {cath_count} cath fellows")
+        if imaging_count < 1:
+            slot_count_errors.append(f"{month} has no imaging fellow")
         if pcicu_count != expected_pcicu:
             slot_count_errors.append(f"{month} has {pcicu_count} PCICU fellows, expected {expected_pcicu}")
         if achd_count > 1:
@@ -186,7 +189,7 @@ def build_validation(
     checks.append({
         "ok": len(unique_slot_errors) == 0,
         "label": "Rotation slot counts",
-        "detail": "Monthly consult, cath, PCICU, and ACHD/EP slot counts are valid." if not unique_slot_errors else " | ".join(unique_slot_errors[:3]),
+        "detail": "Monthly consult, cath, imaging, PCICU, and ACHD/EP slot counts are valid." if not unique_slot_errors else " | ".join(unique_slot_errors[:3]),
     })
     checks.append({
         "ok": len(july_imaging_errors) == 0,

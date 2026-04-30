@@ -181,6 +181,21 @@ class ValidationRuleTests(unittest.TestCase):
         self.assertFalse(pcicu_check["ok"])
         self.assertIn("Amitie", pcicu_check["detail"])
 
+    def test_missing_monthly_imaging_coverage_is_reported(self):
+        rotations = [
+            {"month": "2026-09", "fellow": "Deepthi", "rotation": "consult"},
+            {"month": "2026-09", "fellow": "Amitie", "rotation": "cath"},
+            {"month": "2026-09", "fellow": "Rijutha", "rotation": "pcicu"},
+            {"month": "2026-09", "fellow": "Jeffery", "rotation": "research"},
+            {"month": "2026-09", "fellow": "Jordan", "rotation": "research"},
+            {"month": "2026-09", "fellow": "Kilian", "rotation": "research"},
+        ]
+
+        slot_check = check_by_label(self.build_checks(rotations=rotations), "Rotation slot counts")
+
+        self.assertFalse(slot_check["ok"])
+        self.assertIn("has no imaging fellow", slot_check["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

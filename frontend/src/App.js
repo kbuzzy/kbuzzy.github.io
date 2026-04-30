@@ -96,8 +96,10 @@ export default function App() {
     start,
     testResult,
     validation,
+    validScheduleTarget,
     validGeneratedVersions,
     vacations,
+    setValidScheduleTarget,
   } = useScheduler();
 
   const vacationWeeksFilled = roster.reduce(
@@ -460,8 +462,19 @@ export default function App() {
                       style={{ ...inputStyle, width: 80 }}
                     />
                   </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, color: "#445" }}>Valid schedules target</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="25"
+                      value={validScheduleTarget}
+                      onChange={(e) => setValidScheduleTarget(Math.min(25, Math.max(1, Number(e.target.value) || 1)))}
+                      style={{ ...inputStyle, width: 80 }}
+                    />
+                  </div>
                   <span style={{ fontSize: 12, color: "#667085" }}>
-                    The scheduler stops early after finding 3 valid schedules, then keeps the one with the best request satisfaction.
+                    The scheduler stops early after finding the requested number of valid schedules, then keeps the one with the best request satisfaction.
                   </span>
                 </div>
               </div>

@@ -22,6 +22,7 @@ def add_rotation_constraints(
     for month_idx in range(len(month_keys)):
         model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["consult"])] for fellow_idx in range(fellow_count)) == 1)
         model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["cath"])] for fellow_idx in range(fellow_count)) == 1)
+        model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["imaging"])] for fellow_idx in range(fellow_count)) >= 1)
         if month_keys[month_idx] in exception_tuesday_months:
             model.add(sum(rotation[(fellow_idx, month_idx, rotation_index["pcicu"])] for fellow_idx in range(fellow_count)) == 0)
         else:

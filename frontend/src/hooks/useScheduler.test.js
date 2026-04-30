@@ -1,5 +1,5 @@
-import { buildSummaryForSolvedRun, requestSummaryScore } from "./useScheduler";
-import { INITIAL_ROSTER } from "../config/schedule";
+import { buildSummaryForSolvedRun, effectiveSolveAttemptLimit, requestSummaryScore } from "./useScheduler";
+import { DEFAULT_RETRY_MAX_ATTEMPTS, DEFAULT_VALID_SCHEDULE_TARGET, INITIAL_ROSTER } from "../config/schedule";
 import { createDefaultConferenceBlocks } from "../utils/schedule";
 
 describe("buildSummaryForSolvedRun", () => {
@@ -53,5 +53,18 @@ describe("requestSummaryScore", () => {
     ]);
 
     expect(better).toBeGreaterThan(worse);
+  });
+});
+
+describe("effectiveSolveAttemptLimit", () => {
+  test("keeps the solve attempt cap at least as high as the valid schedule target", () => {
+    expect(effectiveSolveAttemptLimit(3, 5)).toBe(5);
+    expect(effectiveSolveAttemptLimit(8, 5)).toBe(8);
+  });
+
+  test("falls back to configured defaults for invalid values", () => {
+    expect(effectiveSolveAttemptLimit("", "")).toBe(
+      Math.max(DEFAULT_RETRY_MAX_ATTEMPTS, DEFAULT_VALID_SCHEDULE_TARGET),
+    );
   });
 });

@@ -152,12 +152,14 @@ export function buildValidation(schedule, rotations, holidayWeekends, majorHolid
   monthKeys.forEach((month) => {
     const consultCount = rotationCountByMonthType[`${month}::consult`] || 0;
     const cathCount = rotationCountByMonthType[`${month}::cath`] || 0;
+    const imagingCount = rotationCountByMonthType[`${month}::imaging`] || 0;
     const pcicuCount = rotationCountByMonthType[`${month}::pcicu`] || 0;
     const achdCount = rotationCountByMonthType[`${month}::achd_ep`] || 0;
     const expectedPcicu = exceptionMonthSet.has(month) ? 0 : 1;
 
     if (consultCount !== 1) slotCountErrors.push(`${month} has ${consultCount} consult fellows`);
     if (cathCount !== 1) slotCountErrors.push(`${month} has ${cathCount} cath fellows`);
+    if (imagingCount < 1) slotCountErrors.push(`${month} has no imaging fellow`);
     if (pcicuCount !== expectedPcicu) slotCountErrors.push(`${month} has ${pcicuCount} PCICU fellows, expected ${expectedPcicu}`);
     if (achdCount > 1) slotCountErrors.push(`${month} has ${achdCount} ACHD/EP fellows`);
   });
@@ -175,7 +177,7 @@ export function buildValidation(schedule, rotations, holidayWeekends, majorHolid
     ok: uniqueSlotErrors.length === 0,
     label: "Rotation slot counts",
     detail: uniqueSlotErrors.length === 0
-      ? "Monthly consult, cath, PCICU, and ACHD/EP slot counts are valid."
+      ? "Monthly consult, cath, imaging, PCICU, and ACHD/EP slot counts are valid."
       : uniqueSlotErrors.slice(0, 3).join(" | "),
   });
   checks.push({

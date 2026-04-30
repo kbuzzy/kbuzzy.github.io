@@ -7,6 +7,7 @@ import {
   DATE_FMT,
   DEFAULT_PCICU_EXCEPTION_MONTHS,
   DEFAULT_RETRY_MAX_ATTEMPTS,
+  DEFAULT_VALID_SCHEDULE_TARGET,
   INITIAL_ROSTER,
   STORAGE_KEY,
   STORAGE_VERSION,
@@ -77,6 +78,12 @@ function safeBuildRequestSummary(input) {
   } catch {
     return [];
   }
+}
+
+export function effectiveSolveAttemptLimit(maxRetryAttempts, validScheduleTarget) {
+  const target = Math.max(1, Number(validScheduleTarget) || DEFAULT_VALID_SCHEDULE_TARGET);
+  const maxAttempts = Math.max(1, Number(maxRetryAttempts) || DEFAULT_RETRY_MAX_ATTEMPTS);
+  return Math.max(target, maxAttempts);
 }
 
 export function buildSummaryForSolvedRun({
@@ -270,6 +277,9 @@ export function useScheduler() {
   const [backendChecking, setBackendChecking] = useState(Boolean(API_URL));
   const [retryUntilValid, setRetryUntilValid] = useState(storedState?.retryUntilValid || false);
   const [maxRetryAttempts, setMaxRetryAttempts] = useState(storedState?.maxRetryAttempts || DEFAULT_RETRY_MAX_ATTEMPTS);
+  const [validScheduleTarget, setValidScheduleTarget] = useState(
+    storedState?.validScheduleTarget || DEFAULT_VALID_SCHEDULE_TARGET,
+  );
   const activeRequestControllerRef = useRef(null);
   const activeRunIdRef = useRef(0);
 
@@ -351,6 +361,7 @@ export function useScheduler() {
         testResult,
         retryUntilValid,
         maxRetryAttempts,
+        validScheduleTarget,
       }),
     );
   }, [
@@ -374,6 +385,7 @@ export function useScheduler() {
     testResult,
     vacations,
     validation,
+    validScheduleTarget,
   ]);
 
   useEffect(() => {
@@ -471,7 +483,8 @@ export function useScheduler() {
       selectedExceptionMonths,
     } = options;
 
-    const totalAttempts = Math.max(3, Number(maxRetryAttempts) || 3);
+    const targetValidSchedules = Math.max(1, Number(validScheduleTarget) || DEFAULT_VALID_SCHEDULE_TARGET);
+    const totalAttempts = effectiveSolveAttemptLimit(maxRetryAttempts, targetValidSchedules);
     const attempts = [];
     const validAttempts = [];
     const signal = activeRequestControllerRef.current?.signal;
@@ -572,7 +585,7 @@ export function useScheduler() {
       attempts.push(attemptResult);
       if (validationPassed) {
         validAttempts.push(attemptResult);
-        if (validAttempts.length >= 3) break;
+        if (validAttempts.length >= targetValidSchedules) break;
       }
     }
 
@@ -590,9 +603,10 @@ export function useScheduler() {
       attemptsUsed: attempts.length,
       validAttempts: validAttempts.length,
       validGeneratedVersions: validAttempts,
-      generatedTargetMet: validAttempts.length >= 3,
+      targetValidSchedules,
+      generatedTargetMet: validAttempts.length >= targetValidSchedules,
     };
-  }, [buildSchedulePayload, conferenceBlocks, end, majorHolidayBlocks, maxRetryAttempts, requestSchedule, roster, start]);
+  }, [buildSchedulePayload, conferenceBlocks, end, majorHolidayBlocks, maxRetryAttempts, requestSchedule, roster, start, validScheduleTarget]);
 
   const applySolvedResult = useCallback((data, nextValidation) => {
     setSchedule(data.schedule || []);
@@ -616,7 +630,7 @@ export function useScheduler() {
     const runId = activeRunIdRef.current + 1;
     activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
-    setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: Math.max(3, Number(maxRetryAttempts) || 3) });
+    setLoadingMode({ kind: "generate", attempt: 1, totalAttempts: effectiveSolveAttemptLimit(maxRetryAttempts, validScheduleTarget) });
     setLoading(true);
     setError(null);
     setValidation([]);
@@ -681,6 +695,7 @@ export function useScheduler() {
     roster,
     vacations,
     solveWithRetries,
+    validScheduleTarget,
   ]);
 
   const finalizeTestResult = useCallback(async (
@@ -756,7 +771,7 @@ export function useScheduler() {
       details: [
         `Best schedule selected from attempt ${result.attempt}`,
         `Solver attempts used: ${result.attemptsUsed}/${result.totalAttempts}`,
-        `Valid schedules generated: ${result.validAttempts}`,
+        `Valid schedules generated: ${result.validAttempts}/${result.targetValidSchedules || DEFAULT_VALID_SCHEDULE_TARGET}`,
         `Vacation alternatives selected: ${(result.vacationFallbacks || []).length}`,
         `Request satisfaction score: ${result.requestScore}`,
         `Schedule days returned: ${(data.schedule || []).length}`,
@@ -774,7 +789,7 @@ export function useScheduler() {
     const runId = activeRunIdRef.current + 1;
     activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
-    setLoadingMode({ kind: "randomTest", attempt: 1, totalAttempts: Math.max(3, Number(maxRetryAttempts) || 3) });
+    setLoadingMode({ kind: "randomTest", attempt: 1, totalAttempts: effectiveSolveAttemptLimit(maxRetryAttempts, validScheduleTarget) });
     setLoading(true);
     setError(null);
     setTestResult(null);
@@ -844,7 +859,7 @@ export function useScheduler() {
         setLoading(false);
       }
     }
-  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, roster, solveWithRetries, start]);
+  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, maxRetryAttempts, months, roster, solveWithRetries, start, validScheduleTarget]);
 
   const runTypicalTest = useCallback(async () => {
     if (!apiConfigured) return;
@@ -852,7 +867,7 @@ export function useScheduler() {
     const runId = activeRunIdRef.current + 1;
     activeRunIdRef.current = runId;
     activeRequestControllerRef.current = new AbortController();
-    setLoadingMode({ kind: "typicalTest", attempt: 1, totalAttempts: Math.max(3, Number(maxRetryAttempts) || 3) });
+    setLoadingMode({ kind: "typicalTest", attempt: 1, totalAttempts: effectiveSolveAttemptLimit(maxRetryAttempts, validScheduleTarget) });
     setLoading(true);
     setError(null);
     setTestResult(null);
@@ -930,7 +945,7 @@ export function useScheduler() {
         setLoading(false);
       }
     }
-  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, roster, solveWithRetries, start, maxRetryAttempts]);
+  }, [apiConfigured, conferenceBlocks, end, finalizeTestResult, majorHolidayBlocks, roster, solveWithRetries, start, maxRetryAttempts, validScheduleTarget]);
 
   const exportWorkbook = useCallback(() => exportCalendarWorkbook(
     schedule,
@@ -1030,6 +1045,7 @@ export function useScheduler() {
     setActiveTab("scheduler");
     setRetryUntilValid(false);
     setMaxRetryAttempts(DEFAULT_RETRY_MAX_ATTEMPTS);
+    setValidScheduleTarget(DEFAULT_VALID_SCHEDULE_TARGET);
   }, [defaultWindow.end, defaultWindow.start]);
 
   return {
@@ -1085,7 +1101,9 @@ export function useScheduler() {
     start,
     testResult,
     validation,
+    validScheduleTarget,
     validGeneratedVersions,
     vacations,
+    setValidScheduleTarget,
   };
 }

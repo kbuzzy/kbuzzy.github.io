@@ -84,6 +84,7 @@ class ScheduleRegressionTests(unittest.TestCase):
 
         for month, counts in counts_by_month.items():
             expected_imaging_max = 2 if month == "2026-07" else 2
+            self.assertGreaterEqual(counts.get("imaging", 0), 1)
             self.assertLessEqual(counts.get("imaging", 0), expected_imaging_max)
             self.assertLessEqual(counts.get("research", 0), 3)
 

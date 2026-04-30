@@ -309,6 +309,7 @@ export function RulesValidationTab({ checks, error }) {
         "The supported rotations are consult, imaging, research, cath, ACHD/EP, and PCICU.",
         "Consult, cath, PCICU, and ACHD/EP are single-slot monthly rotations.",
         "The solver discourages more than one fellow on imaging in the same month, except for the first-month PGY-4 bootcamp/orientation block.",
+        "At least one fellow must be assigned to imaging in every month of the academic year.",
         "The solver discourages more than three fellows on research in the same month.",
         "Both first-year fellows (PGY-4) must be on imaging in the first month of the academic year.",
         "No fellow may repeat the same non-research rotation in back-to-back months.",

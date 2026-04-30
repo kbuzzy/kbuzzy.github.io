@@ -11,6 +11,7 @@ export const MAX_CALL_AVOID_REQUESTS = 8;
 export const STORAGE_KEY = "fellowship-scheduler-state";
 export const STORAGE_VERSION = 4;
 export const DEFAULT_RETRY_MAX_ATTEMPTS = 8;
+export const DEFAULT_VALID_SCHEDULE_TARGET = 5;
 export const CURRENT_ACADEMIC_YEAR_CONFIG = {
   startYear: 2026,
   holidayWeekends: [
