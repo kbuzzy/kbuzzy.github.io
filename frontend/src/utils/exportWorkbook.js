@@ -301,26 +301,123 @@ function buildUnfulfilledRequestsSheet(workbook, versions) {
   }
 }
 
+function rotationFill(rotation) {
+  const fills = {
+    consult: "FFFCE7F3",
+    imaging: "FFE0F2FE",
+    research: "FFEFF6E8",
+    cath: "FFFFF4DE",
+    achd_ep: "FFEDE9FE",
+    pcicu: "FFFFE4E6",
+  };
+  return fills[rotation] || "FFF8FAFC";
+}
+
 function buildVersionScheduleSheet(workbook, version, versionIndex) {
   const sheet = workbook.addWorksheet(`Version ${versionIndex + 1}`);
-  sheet.columns = [
-    { width: 16 },
-    { width: 22 },
-    { width: 22 },
-  ];
-  ["Date", "Fellow", "Call Type"].forEach((header, index) => {
-    const cell = sheet.getRow(1).getCell(index + 1);
+  sheet.columns = Array.from({ length: 14 }, () => ({ width: 16 }));
+
+  sheet.mergeCells("A1:N1");
+  const titleCell = sheet.getCell("A1");
+  titleCell.value = `Valid Schedule Version ${versionIndex + 1}`;
+  titleCell.font = { bold: true, size: 16 };
+  titleCell.alignment = { horizontal: "center" };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCE7F3" } };
+
+  const rotations = version.data?.rotations || [];
+  const rotationFellows = [...new Set(rotations.map((item) => item.fellow))].sort();
+  const rotationMonths = [...new Set(rotations.map((item) => item.month))].sort();
+  const rotationMap = new Map(rotations.map((item) => [`${item.fellow}::${item.month}`, item.rotation]));
+  let rowIndex = 3;
+
+  sheet.getRow(rowIndex).getCell(1).value = "Rotation Blocks";
+  sheet.getRow(rowIndex).getCell(1).font = { bold: true, size: 13 };
+  rowIndex += 1;
+
+  const rotationHeader = sheet.getRow(rowIndex);
+  ["Fellow", ...rotationMonths].forEach((header, index) => {
+    const cell = rotationHeader.getCell(index + 1);
     cell.value = header;
     cell.font = { bold: true };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
     styleCalendarCell(cell);
   });
-  (version.data?.schedule || []).forEach((item, index) => {
-    const row = sheet.getRow(index + 2);
-    row.getCell(1).value = item.date;
-    row.getCell(2).value = item.fellow;
-    row.getCell(3).value = item.call_type || "";
-    for (let col = 1; col <= 3; col += 1) styleCalendarCell(row.getCell(col));
+  rowIndex += 1;
+
+  rotationFellows.forEach((fellow) => {
+    const row = sheet.getRow(rowIndex);
+    row.getCell(1).value = fellow;
+    row.getCell(1).font = { bold: true };
+    styleCalendarCell(row.getCell(1));
+    rotationMonths.forEach((month, monthIndex) => {
+      const rotation = rotationMap.get(`${fellow}::${month}`) || "";
+      const cell = row.getCell(monthIndex + 2);
+      cell.value = rotation;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rotationFill(rotation) } };
+      styleCalendarCell(cell);
+    });
+    rowIndex += 1;
+  });
+
+  rowIndex += 2;
+  sheet.getRow(rowIndex).getCell(1).value = "Call Calendar";
+  sheet.getRow(rowIndex).getCell(1).font = { bold: true, size: 13 };
+  rowIndex += 1;
+
+  const schedule = version.data?.schedule || [];
+  const scheduleMap = new Map(schedule.map((item) => [item.date, item]));
+  const fellows = [...new Set(schedule.map((item) => item.fellow))].sort();
+  const scheduleMonths = [...new Set(schedule.map((item) => moment(item.date, DATE_FMT).format("YYYY-MM")))].sort();
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  scheduleMonths.forEach((monthKey) => {
+    const monthDate = moment(`${monthKey}-01`, "YYYY-MM-DD");
+    sheet.mergeCells(rowIndex, 1, rowIndex, 7);
+    const monthTitle = sheet.getRow(rowIndex).getCell(1);
+    monthTitle.value = monthDate.format("MMMM YYYY");
+    monthTitle.font = { bold: true };
+    monthTitle.alignment = { horizontal: "center" };
+    monthTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE9EEF5" } };
+    rowIndex += 1;
+
+    const headerRow = sheet.getRow(rowIndex);
+    dayNames.forEach((name, index) => {
+      const cell = headerRow.getCell(index + 1);
+      cell.value = name;
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F7" } };
+      styleCalendarCell(cell);
+    });
+    rowIndex += 1;
+
+    let current = monthDate.clone().startOf("month").startOf("week");
+    const monthEnd = monthDate.clone().endOf("month");
+    while (current.isSameOrBefore(monthEnd, "day") || current.weekday() !== 0) {
+      const row = sheet.getRow(rowIndex);
+      row.height = 52;
+      for (let col = 1; col <= 7; col += 1) {
+        const cell = row.getCell(col);
+        const dateStr = current.format(DATE_FMT);
+        const item = scheduleMap.get(dateStr);
+        styleCalendarCell(cell);
+        if (current.month() !== monthDate.month()) {
+          cell.value = "";
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+        } else if (item) {
+          const fellowIndex = fellows.indexOf(item.fellow);
+          cell.value = `${current.date()}\n${item.fellow}\n${item.call_type || ""}`;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: toArgb(fellowColor(Math.max(fellowIndex, 0))) } };
+          cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+        } else {
+          cell.value = current.date();
+        }
+        current.add(1, "day");
+      }
+      rowIndex += 1;
+      if (current.isAfter(monthEnd, "day") && current.weekday() === 0) break;
+    }
+    rowIndex += 2;
   });
 }
 

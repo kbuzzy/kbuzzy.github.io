@@ -17,6 +17,10 @@ describe("exportScheduleComparisonWorkbook", () => {
         ],
         data: {
           schedule: [{ date: "07/01/2026", fellow: "Deepthi", call_type: "In-House Call" }],
+          rotations: [
+            { month: "2026-07", fellow: "Deepthi", rotation: "imaging" },
+            { month: "2026-07", fellow: "Amitie", rotation: "consult" },
+          ],
         },
       },
       {
@@ -27,6 +31,10 @@ describe("exportScheduleComparisonWorkbook", () => {
         requestSummary: [],
         data: {
           schedule: [{ date: "07/01/2026", fellow: "Amitie", call_type: "Home Call" }],
+          rotations: [
+            { month: "2026-07", fellow: "Deepthi", rotation: "consult" },
+            { month: "2026-07", fellow: "Amitie", rotation: "imaging" },
+          ],
         },
       },
     ], { download: false });
@@ -36,5 +44,8 @@ describe("exportScheduleComparisonWorkbook", () => {
     expect(workbook.getWorksheet("Version 1")).toBeTruthy();
     expect(workbook.getWorksheet("Version 2")).toBeTruthy();
     expect(workbook.getWorksheet("Unfulfilled Requests").getRow(2).getCell(4).value).toBe("Vacation week 1");
+    expect(workbook.getWorksheet("Version 1").getCell("A3").value).toBe("Rotation Blocks");
+    expect(workbook.getWorksheet("Version 1").getCell("B4").value).toBe("2026-07");
+    expect(workbook.getWorksheet("Version 1").getCell("A9").value).toBe("Call Calendar");
   });
 });
