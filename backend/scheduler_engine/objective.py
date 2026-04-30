@@ -22,6 +22,7 @@ def configure_objective(
     holiday_block_starts: set[int],
     major_half_info: list[dict],
     month_count: int,
+    extra_soft_bound: int = 0,
 ):
     ordered_in_house_days = sorted(in_house_days)
     in_house_counts = [sum(call[(fellow_idx, day_idx)] for day_idx in ordered_in_house_days) for fellow_idx in range(fellow_count)]
@@ -70,6 +71,7 @@ def configure_objective(
         + call_avoid_soft_bound
         + thursday_soft_bound
         + difficult_streak_soft_bound
+        + extra_soft_bound
     )
     total_call_range_priority = soft_score_span + 1
     in_house_pairwise_upper = len(ordered_in_house_days) * (fellow_count * (fellow_count - 1) // 2)

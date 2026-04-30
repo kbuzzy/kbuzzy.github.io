@@ -2,18 +2,20 @@ from datetime import datetime, timedelta
 
 from ortools.sat.python import cp_model
 
-from .academic_year import academic_year_start_year, build_month_keys, october_month_key
+from .academic_year import academic_year_start_year, build_month_keys, first_month_key, october_month_key
 from .calendar_rules import build_call_blocks, idx, month_key, parse_iso, validate_schedule_inputs
 from .constants import (
     CATH_THURSDAY_WEIGHT,
     DIFFICULT_ROTATION_STREAK_WEIGHT,
     HOLIDAY_WEEKENDS,
+    IMAGING_CROWDING_WEIGHT,
     IN_HOUSE_TARGET_MAX,
     IN_HOUSE_TARGET_MIN,
     MAX_SOLVER_SECONDS,
     OCTOBER_BOARD_WEIGHT,
     PGY_PREFERENCE_WEIGHTS,
     PGY_WEEKEND_TARGETS,
+    RESEARCH_CROWDING_WEIGHT,
     ROTATIONS,
 )
 from .objective import configure_objective
@@ -314,6 +316,22 @@ def generate_schedule(
             model.add(hard_run >= hard_month[(fellow_idx, month_idx)] + hard_month[(fellow_idx, month_idx + 1)] + hard_month[(fellow_idx, month_idx + 2)] - 2)
             soft_terms.append(-DIFFICULT_ROTATION_STREAK_WEIGHT * hard_run)
 
+    rotation_crowding_soft_bound = 0
+    first_imaging_idx = month_index[first_month_key(start_year)]
+    for month_idx, month in enumerate(month_keys):
+        imaging_count = sum(rotation[(fellow_idx, month_idx, rotation_index["imaging"])] for fellow_idx in range(fellow_count))
+        imaging_allowed = 2 if month_idx == first_imaging_idx else 1
+        imaging_excess = model.new_int_var(0, fellow_count, f"imaging_excess_{month}")
+        model.add(imaging_excess >= imaging_count - imaging_allowed)
+        soft_terms.append(-IMAGING_CROWDING_WEIGHT * imaging_excess)
+        rotation_crowding_soft_bound += IMAGING_CROWDING_WEIGHT * fellow_count
+
+        research_count = sum(rotation[(fellow_idx, month_idx, rotation_index["research"])] for fellow_idx in range(fellow_count))
+        research_excess = model.new_int_var(0, fellow_count, f"research_excess_{month}")
+        model.add(research_excess >= research_count - 3)
+        soft_terms.append(-RESEARCH_CROWDING_WEIGHT * research_excess)
+        rotation_crowding_soft_bound += RESEARCH_CROWDING_WEIGHT * fellow_count
+
     configure_objective(
         model=model,
         call=call,
@@ -326,6 +344,7 @@ def generate_schedule(
         holiday_block_starts=holiday_block_starts,
         major_half_info=major_half_info,
         month_count=len(month_keys),
+        extra_soft_bound=rotation_crowding_soft_bound,
     )
 
     solver = cp_model.CpSolver()

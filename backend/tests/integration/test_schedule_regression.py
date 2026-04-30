@@ -76,6 +76,17 @@ class ScheduleRegressionTests(unittest.TestCase):
         self.assertTrue(check_by_label(checks, "Heart Camp call blackout")["ok"])
         self.assertTrue(check_by_label(checks, "CHOP Conference call blackout")["ok"])
 
+    def test_rotation_crowding_is_minimized_in_standard_case(self):
+        counts_by_month = {}
+        for item in self.result["rotations"]:
+            month_counts = counts_by_month.setdefault(item["month"], {})
+            month_counts[item["rotation"]] = month_counts.get(item["rotation"], 0) + 1
+
+        for month, counts in counts_by_month.items():
+            expected_imaging_max = 2 if month == "2026-07" else 2
+            self.assertLessEqual(counts.get("imaging", 0), expected_imaging_max)
+            self.assertLessEqual(counts.get("research", 0), 3)
+
     def test_validation_detects_modified_consult_monday_on_real_schedule(self):
         mutated_schedule = copy.deepcopy(self.result["schedule"])
         covered_dates = set()
