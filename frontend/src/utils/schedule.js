@@ -588,6 +588,55 @@ export function listCandidateVacationWeeks(start, end, majorHolidayBlocks) {
   return candidates;
 }
 
+function expandVacationRange(range) {
+  if (!range?.from || !range?.to) return [];
+  const dates = [];
+  const cur = moment(range.from, DATE_FMT);
+  const last = moment(range.to, DATE_FMT);
+  while (cur.isSameOrBefore(last)) {
+    dates.push(cur.format(DATE_FMT));
+    cur.add(1, "day");
+  }
+  return dates;
+}
+
+function vacationOverlapCounts(vacations) {
+  const counts = {};
+  Object.values(vacations || {}).forEach((ranges) => {
+    (ranges || []).forEach((range) => {
+      expandVacationRange(range).forEach((date) => {
+        counts[date] = (counts[date] || 0) + 1;
+      });
+    });
+  });
+  return counts;
+}
+
+export function findAlternativeVacationWeek(fellowId, vacations, start, end, majorHolidayBlocks) {
+  const candidates = shuffle(listCandidateVacationWeeks(start, end, majorHolidayBlocks));
+  const existingRanges = vacations?.[fellowId] || [];
+  const existingKeys = new Set(existingRanges.map((range) => `${range.from}::${range.to}`));
+  const counts = vacationOverlapCounts(vacations);
+
+  return candidates.find((candidate) => {
+    if (existingKeys.has(`${candidate.from}::${candidate.to}`)) return false;
+    return expandVacationRange(candidate).every((date) => (counts[date] || 0) < 2);
+  }) || null;
+}
+
+export function replaceVacationWeek(vacations, fellowId, rangeIndex, replacement) {
+  return {
+    ...vacations,
+    [fellowId]: (vacations?.[fellowId] || []).map((range, index) => (
+      index === rangeIndex ? replacement : range
+    )),
+  };
+}
+
+export function vacationWeekHasHolidayConflict(unmetItem) {
+  return Boolean(unmetItem?.label?.includes("Vacation week") && unmetItem?.reason?.includes("overlap holiday coverage"));
+}
+
 export function createTypicalVacations(roster, start, end, majorHolidayBlocks) {
   const candidates = shuffle(listCandidateVacationWeeks(start, end, majorHolidayBlocks));
   const needed = roster.length * MAX_VACATION_WEEKS;

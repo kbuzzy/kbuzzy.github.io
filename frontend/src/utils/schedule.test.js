@@ -14,9 +14,11 @@ import {
   createRandomPreferenceState,
   expandDateRanges,
   exportScheduleRequestsCsv,
+  findAlternativeVacationWeek,
   getCallType,
   importScheduleRequestsCsv,
   listCandidateVacationWeeks,
+  replaceVacationWeek,
   serializeConferenceBlocks,
 } from "./schedule";
 import { INITIAL_ROSTER } from "../config/schedule";
@@ -65,6 +67,25 @@ describe("createTypicalVacations", () => {
     } finally {
       randomSpy.mockRestore();
     }
+  });
+});
+
+describe("vacation alternatives", () => {
+  test("finds a non-holiday replacement week without creating a third overlapping vacation", () => {
+    const majorHolidayBlocks = createDefaultMajorHolidayBlocks();
+    const vacations = {
+      f1: [{ from: "12/21/2026", to: "12/25/2026" }],
+      f2: [{ from: "07/06/2026", to: "07/10/2026" }],
+      f3: [{ from: "07/06/2026", to: "07/10/2026" }],
+    };
+
+    const replacement = findAlternativeVacationWeek("f1", vacations, DEFAULT_WINDOW.start, DEFAULT_WINDOW.end, majorHolidayBlocks);
+    const updated = replaceVacationWeek(vacations, "f1", 0, replacement);
+
+    expect(replacement).toBeTruthy();
+    expect(replacement).not.toEqual({ from: "12/21/2026", to: "12/25/2026" });
+    expect(replacement).not.toEqual({ from: "07/06/2026", to: "07/10/2026" });
+    expect(updated.f1[0]).toEqual(replacement);
   });
 });
 

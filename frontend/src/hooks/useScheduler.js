@@ -27,13 +27,16 @@ import {
   exportScheduleRequestsCsv,
   expandDateRanges,
   expandWeekRanges,
+  findAlternativeVacationWeek,
   importScheduleRequestsCsv,
   listMonths,
   randomVacationWeeks,
   readStoredState,
+  replaceVacationWeek,
   sample,
   serializeConferenceBlocks,
   serializeMajorHolidayBlocks,
+  vacationWeekHasHolidayConflict,
 } from "../utils/schedule";
 import { buildValidation } from "../utils/validation";
 
@@ -108,6 +111,112 @@ export function requestSummaryScore(summary) {
     const unmet = Array.isArray(item?.unmet) ? item.unmet.length : 0;
     return total + satisfied - unmet;
   }, 0);
+}
+
+function parseVacationWeekNumber(label) {
+  const match = String(label || "").match(/Vacation week (\d+)/);
+  return match ? Number(match[1]) - 1 : null;
+}
+
+function replaceUnworkableVacationWeeks({
+  vacationsById,
+  roster,
+  requestSummary,
+  start,
+  end,
+  majorHolidayBlocks,
+}) {
+  let nextVacations = vacationsById;
+  const replacements = [];
+
+  (requestSummary || []).forEach((item) => {
+    const fellow = roster.find((candidate) => candidate.name.trim() === item?.fellow);
+    if (!fellow) return;
+    (item.unmet || []).forEach((unmetItem) => {
+      if (!vacationWeekHasHolidayConflict(unmetItem)) return;
+      const rangeIndex = parseVacationWeekNumber(unmetItem.label);
+      if (rangeIndex === null) return;
+      const replacement = findAlternativeVacationWeek(fellow.id, nextVacations, start, end, majorHolidayBlocks);
+      if (!replacement) return;
+      const prior = nextVacations?.[fellow.id]?.[rangeIndex];
+      nextVacations = replaceVacationWeek(nextVacations, fellow.id, rangeIndex, replacement);
+      replacements.push({
+        fellow: fellow.name.trim(),
+        from: prior?.from,
+        to: prior?.to,
+        replacement,
+      });
+    });
+  });
+
+  return { vacationsById: nextVacations, replacements };
+}
+
+function rangeIncludesDate(range, date) {
+  if (!range?.from || !range?.to) return false;
+  return moment(date, DATE_FMT).isBetween(moment(range.from, DATE_FMT), moment(range.to, DATE_FMT), "day", "[]");
+}
+
+function vacationDateCountsByFellow(vacationsById) {
+  const counts = {};
+  Object.entries(vacationsById || {}).forEach(([fellowId, ranges]) => {
+    (ranges || []).forEach((range, rangeIndex) => {
+      const cur = moment(range.from, DATE_FMT);
+      const last = moment(range.to, DATE_FMT);
+      while (cur.isSameOrBefore(last)) {
+        const date = cur.format(DATE_FMT);
+        counts[date] = counts[date] || [];
+        counts[date].push({ fellowId, rangeIndex });
+        cur.add(1, "day");
+      }
+    });
+  });
+  return counts;
+}
+
+function replaceOverlappingVacationWeeks({ vacationsById, start, end, majorHolidayBlocks }) {
+  let nextVacations = vacationsById;
+  const replacements = [];
+
+  for (let iteration = 0; iteration < 20; iteration += 1) {
+    const conflict = Object.entries(vacationDateCountsByFellow(nextVacations))
+      .find(([, entries]) => entries.length > 2);
+    if (!conflict) break;
+    const [date, entries] = conflict;
+    const replacementTarget = entries[entries.length - 1];
+    const replacement = findAlternativeVacationWeek(replacementTarget.fellowId, nextVacations, start, end, majorHolidayBlocks);
+    if (!replacement) break;
+    const prior = nextVacations?.[replacementTarget.fellowId]?.[replacementTarget.rangeIndex];
+    if (!rangeIncludesDate(prior, date)) break;
+    nextVacations = replaceVacationWeek(nextVacations, replacementTarget.fellowId, replacementTarget.rangeIndex, replacement);
+    replacements.push({ fellowId: replacementTarget.fellowId, from: prior?.from, to: prior?.to, replacement });
+  }
+
+  return { vacationsById: nextVacations, replacements };
+}
+
+function replaceNextVacationWeek({ vacationsById, roster, start, end, majorHolidayBlocks, offset = 0 }) {
+  const indexedRanges = roster.flatMap((fellow) => (
+    (vacationsById?.[fellow.id] || []).map((range, rangeIndex) => ({ fellow, range, rangeIndex }))
+  ));
+  if (!indexedRanges.length) return { vacationsById, replacement: null };
+
+  for (let step = 0; step < indexedRanges.length; step += 1) {
+    const target = indexedRanges[(offset + step) % indexedRanges.length];
+    const replacement = findAlternativeVacationWeek(target.fellow.id, vacationsById, start, end, majorHolidayBlocks);
+    if (!replacement) continue;
+    return {
+      vacationsById: replaceVacationWeek(vacationsById, target.fellow.id, target.rangeIndex, replacement),
+      replacement: {
+        fellow: target.fellow.name.trim(),
+        from: target.range?.from,
+        to: target.range?.to,
+        replacement,
+      },
+    };
+  }
+
+  return { vacationsById, replacement: null };
 }
 
 function validationScore(checks) {
@@ -366,26 +475,80 @@ export function useScheduler() {
     const validAttempts = [];
     const signal = activeRequestControllerRef.current?.signal;
 
+    let activeVacationsById = replaceOverlappingVacationWeeks({
+      vacationsById,
+      start,
+      end,
+      majorHolidayBlocks,
+    }).vacationsById;
+
     for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
       if (signal?.aborted) {
         throw new DOMException("Scheduling request canceled.", "AbortError");
       }
       setLoadingMode({ kind, attempt, totalAttempts });
-      const payload = buildSchedulePayload({
-        vacationsById,
-        callAvoidRequestsById,
-        selectedBoardExamIds,
-        selectedPreferences,
-        selectedExceptionMonths,
-        solverSeed: Math.floor(Math.random() * 1_000_000_000),
-      });
-      const data = await requestSchedule(payload, signal);
+      let data = null;
+      let vacationsForAttempt = activeVacationsById;
+      let vacationFallbacks = [];
+
+      for (let vacationRetry = 0; vacationRetry < 3; vacationRetry += 1) {
+        const payload = buildSchedulePayload({
+          vacationsById: vacationsForAttempt,
+          callAvoidRequestsById,
+          selectedBoardExamIds,
+          selectedPreferences,
+          selectedExceptionMonths,
+          solverSeed: Math.floor(Math.random() * 1_000_000_000),
+        });
+        try {
+          data = await requestSchedule(payload, signal);
+        } catch (err) {
+          if (!String(err?.message || "").includes("No feasible schedule found") || vacationRetry >= 2) {
+            throw err;
+          }
+          const fallback = replaceNextVacationWeek({
+            vacationsById: vacationsForAttempt,
+            roster,
+            start,
+            end,
+            majorHolidayBlocks,
+            offset: attempt + vacationRetry,
+          });
+          if (!fallback.replacement) throw err;
+          vacationsForAttempt = fallback.vacationsById;
+          vacationFallbacks.push(fallback.replacement);
+          continue;
+        }
+        const preliminarySummary = buildSummaryForSolvedRun({
+          start,
+          roster,
+          vacations: vacationsForAttempt,
+          callAvoidRequests: callAvoidRequestsById,
+          boardExamIds: selectedBoardExamIds,
+          holidayPreferences: selectedPreferences,
+          conferenceBlocks,
+          data,
+        });
+        const fallback = replaceUnworkableVacationWeeks({
+          vacationsById: vacationsForAttempt,
+          roster,
+          requestSummary: preliminarySummary,
+          start,
+          end,
+          majorHolidayBlocks,
+        });
+        if (!fallback.replacements.length || vacationRetry >= 2) break;
+        vacationsForAttempt = fallback.vacationsById;
+        vacationFallbacks = vacationFallbacks.concat(fallback.replacements);
+      }
+
+      activeVacationsById = vacationsForAttempt;
       const nextValidation = getValidationForResult(data, start, end, selectedExceptionMonths, roster);
       const validationPassed = nextValidation.every((check) => check.ok);
       const requestSummaryForAttempt = buildSummaryForSolvedRun({
         start,
         roster,
-        vacations: vacationsById,
+        vacations: vacationsForAttempt,
         callAvoidRequests: callAvoidRequestsById,
         boardExamIds: selectedBoardExamIds,
         holidayPreferences: selectedPreferences,
@@ -401,6 +564,8 @@ export function useScheduler() {
         attempt,
         totalAttempts,
         validAttempts: 0,
+        vacationsById: vacationsForAttempt,
+        vacationFallbacks,
       };
       attempts.push(attemptResult);
       if (validationPassed) {
@@ -418,12 +583,13 @@ export function useScheduler() {
     ))[0];
     return {
       ...bestAttempt,
+      vacationsById: bestAttempt.vacationsById || activeVacationsById,
       totalAttempts,
       attemptsUsed: attempts.length,
       validAttempts: validAttempts.length,
       generatedTargetMet: validAttempts.length >= 3,
     };
-  }, [buildSchedulePayload, conferenceBlocks, end, maxRetryAttempts, requestSchedule, roster, start]);
+  }, [buildSchedulePayload, conferenceBlocks, end, majorHolidayBlocks, maxRetryAttempts, requestSchedule, roster, start]);
 
   const applySolvedResult = useCallback((data, nextValidation) => {
     setSchedule(data.schedule || []);
@@ -482,6 +648,7 @@ export function useScheduler() {
       if (activeRunIdRef.current !== runId) {
         return;
       }
+      setVacations(result.vacationsById || vacations);
       applySolvedResult(result.data, result.nextValidation);
       if (!result.validationPassed) {
         setError(`No fully valid schedule was found after ${result.attemptsUsed} attempt${result.attemptsUsed === 1 ? "" : "s"}. The closest attempt is shown so you can review the remaining conflicts.`);
@@ -585,6 +752,7 @@ export function useScheduler() {
         `Best schedule selected from attempt ${result.attempt}`,
         `Solver attempts used: ${result.attemptsUsed}/${result.totalAttempts}`,
         `Valid schedules generated: ${result.validAttempts}`,
+        `Vacation alternatives selected: ${(result.vacationFallbacks || []).length}`,
         `Request satisfaction score: ${result.requestScore}`,
         `Schedule days returned: ${(data.schedule || []).length}`,
         `Rotation assignments returned: ${(data.rotations || []).length}`,
@@ -628,13 +796,14 @@ export function useScheduler() {
         selectedExceptionMonths: randomExceptionMonths,
       });
       setBackendStatus("connected");
+      setVacations(result.vacationsById || randomVacations);
       setTestResult(await finalizeTestResult(
         "Run Random Test",
         result.data,
         result.nextValidation,
         result,
         randomExceptionMonths,
-        randomVacations,
+        result.vacationsById || randomVacations,
         randomCallAvoidRequests,
         randomBoardExamIds,
         randomPreferences,
@@ -703,13 +872,14 @@ export function useScheduler() {
         selectedPreferences: typicalPreferences,
         selectedExceptionMonths: typicalExceptionMonths,
       });
+      setVacations(result.vacationsById || typicalVacations);
       const nextResult = await finalizeTestResult(
         "Run Typical Schedule Test",
         result.data,
         result.nextValidation,
         result,
         typicalExceptionMonths,
-        typicalVacations,
+        result.vacationsById || typicalVacations,
         typicalCallAvoidRequests,
         typicalBoardExamIds,
         typicalPreferences,
