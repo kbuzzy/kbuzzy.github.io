@@ -16,6 +16,7 @@ from .constants import (
     PGY_PREFERENCE_WEIGHTS,
     PGY_WEEKEND_TARGETS,
     RESEARCH_CROWDING_WEIGHT,
+    THANKSGIVING_KILIAN_PRIORITY_WEIGHT,
     ROTATIONS,
 )
 from .objective import configure_objective
@@ -42,6 +43,21 @@ def generate_schedule(
     del holidays
 
     soft_terms = []
+
+    # Hard code Kilian's Thanksgiving assignment.
+    # This is a strong penalty if Kilian is NOT assigned to Thanksgiving A.
+    kilian_fellow_idx = None
+    for idx, f in enumerate(fellows):
+        if f == "Kilian":
+            kilian_fellow_idx = idx
+            break
+
+    if kilian_fellow_idx is not None:
+        thanksgiving_a_start_date = parse_iso("2026-11-25") # From year_config.py
+        thanksgiving_a_start_idx = idx(thanksgiving_a_start_date, start_date)
+        # Penalize if Kilian is NOT on call for Thanksgiving A
+        soft_terms.append(THANKSGIVING_KILIAN_PRIORITY_WEIGHT * (1 - call[(kilian_fellow_idx, thanksgiving_a_start_idx)]))
+
 
     major_holidays, conference_windows, exception_tuesday_months, normalized_holiday_preferences = validate_schedule_inputs(
         fellows,
