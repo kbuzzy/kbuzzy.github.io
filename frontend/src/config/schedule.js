@@ -15,12 +15,12 @@ export const DEFAULT_VALID_SCHEDULE_TARGET = 5;
 export const CURRENT_ACADEMIC_YEAR_CONFIG = {
   startYear: 2026,
   holidayWeekends: [
-    { label: "July 4", start: "07/03/2026", end: "07/06/2026" },
+    { label: "July 4", start: "07/02/2026", end: "07/05/2026" },
     { label: "Labor Day", start: "09/04/2026", end: "09/07/2026" },
     { label: "MLK Day", start: "01/15/2027", end: "01/18/2027" },
     { label: "Good Friday", start: "03/25/2027", end: "03/28/2027" },
     { label: "Memorial Day", start: "05/28/2027", end: "05/31/2027" },
-    { label: "Juneteenth", start: "06/18/2027", end: "06/21/2027" },
+    { label: "Juneteenth", start: "06/17/2027", end: "06/20/2027" },
   ],
   majorHolidayBlocks: {
     Thanksgiving: [

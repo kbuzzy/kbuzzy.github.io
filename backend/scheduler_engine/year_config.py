@@ -1,10 +1,10 @@
 CURRENT_ACADEMIC_YEAR_CONFIG = {
     "start_year": 2026,
     "holiday_weekends": {
-        "2026-07-03": {
+        "2026-07-02": {
             "label": "July 4",
-            "start": "2026-07-03",
-            "end": "2026-07-06",
+            "start": "2026-07-02",
+            "end": "2026-07-05",
             "holiday_date": "2026-07-04",
         },
         "2026-09-04": {
@@ -23,7 +23,7 @@ CURRENT_ACADEMIC_YEAR_CONFIG = {
             "label": "Good Friday",
             "start": "2027-03-25",
             "end": "2027-03-28",
-            "holiday_date": "2027-03-26",
+            "holiday_date": "2027-03-28",
         },
         "2027-05-28": {
             "label": "Memorial Day",
@@ -31,10 +31,10 @@ CURRENT_ACADEMIC_YEAR_CONFIG = {
             "end": "2027-05-31",
             "holiday_date": "2027-05-31",
         },
-        "2027-06-18": {
+        "2027-06-17": {
             "label": "Juneteenth",
-            "start": "2027-06-18",
-            "end": "2027-06-21",
+            "start": "2027-06-17",
+            "end": "2027-06-20",
             "holiday_date": "2027-06-19",
         },
     },
