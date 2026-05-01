@@ -1126,10 +1126,3 @@ export function useScheduler() {
     setValidScheduleTarget,
   };
 }
-};
-}
-Target,
-  };
-}
- };
-}
