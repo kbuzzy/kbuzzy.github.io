@@ -277,6 +277,7 @@ export function useScheduler() {
   const [rotations, setRotations] = useState(storedState?.rotations || []);
   const [holidayWeekends, setHolidayWeekends] = useState(storedState?.holidayWeekends || []);
   const [majorHolidays, setMajorHolidays] = useState(storedState?.majorHolidays || []);
+  const [vacationChanges, setVacationChanges] = useState(storedState?.vacationChanges || []);
   const [validation, setValidation] = useState(storedState?.validation || []);
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState({ kind: "generate", attempt: 1, totalAttempts: 1 });
@@ -368,6 +369,7 @@ export function useScheduler() {
         rotations,
         holidayWeekends,
         majorHolidays,
+        vacationChanges,
         backendStatus,
         validation,
         testResult,
@@ -396,6 +398,7 @@ export function useScheduler() {
     start,
     testResult,
     vacations,
+    vacationChanges,
     validation,
     validScheduleTarget,
   ]);
@@ -626,6 +629,7 @@ export function useScheduler() {
     setRotations(data.rotations || []);
     setHolidayWeekends(data.holiday_weekends || []);
     setMajorHolidays(data.major_holidays || []);
+    setVacationChanges(data.vacation_changes || []);
     setCalendarDate(moment(start, DATE_FMT).toDate());
     setValidation(nextValidation);
   }, [start]);
@@ -1117,6 +1121,7 @@ export function useScheduler() {
     validScheduleTarget,
     validGeneratedVersions,
     vacations,
+    vacationChanges,
     setValidScheduleTarget,
   };
 }

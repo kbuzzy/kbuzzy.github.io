@@ -183,13 +183,14 @@ def get_all_available_weeks(start: datetime, end: datetime) -> list[tuple[dateti
     return weeks
 
 
-def fill_vacation_weeks(vacations: dict[str, list[datetime]], start: datetime, end: datetime, fellows: list[str]) -> dict[str, list[datetime]]:
+def fill_vacation_weeks(vacations: dict[str, list[datetime]], start: datetime, end: datetime, fellows: list[str]) -> tuple[dict[str, list[datetime]], list[dict]]:
     """
     Ensure each fellow has at least 4 weeks of requested vacation.
     For fellows with less than 4 weeks, automatically add vacation weeks
     that optimize other fellows' scheduling (weeks without other fellows' vacations).
     
-    Returns an updated vacations dict with auto-added weeks.
+    Returns tuple of (updated_vacations_dict, vacation_changes_list).
+    Each change in vacation_changes_list is: {"fellow": name, "weeks_added": N}
     """
     filled_vacations = {fellow: list(dates) for fellow, dates in vacations.items()}
     
@@ -200,6 +201,8 @@ def fill_vacation_weeks(vacations: dict[str, list[datetime]], start: datetime, e
     
     # Get all available weeks in the schedule period
     all_weeks = get_all_available_weeks(start, end)
+    
+    vacation_changes = []
     
     # Process each fellow
     for fellow in fellows:
@@ -225,6 +228,7 @@ def fill_vacation_weeks(vacations: dict[str, list[datetime]], start: datetime, e
             
             # Add weeks to meet the 4-week minimum
             weeks_added = 0
+            added_dates = []
             for week_start in available_weeks_for_fellow:
                 if weeks_added >= weeks_needed:
                     break
@@ -235,10 +239,19 @@ def fill_vacation_weeks(vacations: dict[str, list[datetime]], start: datetime, e
                     # Make sure the date is within the schedule period
                     if start <= vacation_date <= end:
                         filled_vacations[fellow].append(vacation_date)
+                        added_dates.append(vacation_date)
                 
                 weeks_added += 1
+            
+            # Track the change if weeks were added
+            if weeks_added > 0:
+                vacation_changes.append({
+                    "fellow": fellow,
+                    "weeks_added": weeks_added,
+                    "dates_added": sorted([d.strftime(DATE_FMT) for d in added_dates]),
+                })
     
-    return filled_vacations
+    return filled_vacations, vacation_changes
 
 
 def build_infeasibility_hints(req: ScheduleRequest, start: datetime, end: datetime) -> list[str]:
@@ -383,7 +396,7 @@ def create_schedule(req: ScheduleRequest) -> dict:
         )
 
     # Auto-fill vacation weeks to ensure each fellow has at least 4 weeks of vacation
-    vacations = fill_vacation_weeks(vacations, start, end, req.fellows)
+    vacations, vacation_changes = fill_vacation_weeks(vacations, start, end, req.fellows)
 
     try:
         result = generate_schedule(
@@ -411,4 +424,6 @@ def create_schedule(req: ScheduleRequest) -> dict:
                 detail = detail + " The full CP-SAT model was solved and reported infeasible, but no simple preflight conflict was detected."
         raise HTTPException(status_code=422, detail=detail)
 
+    # Include vacation changes in the result
+    result["vacation_changes"] = vacation_changes
     return result

@@ -170,6 +170,53 @@ export function InHouseCallSummary({ roster, schedule, exceptionMonths, majorHol
   );
 }
 
+export function VacationChangesPanel({ vacationChanges }) {
+  if (!vacationChanges?.length) return null;
+
+  return (
+    <div style={{ marginBottom: 20, overflowX: "auto" }}>
+      <h2 style={{ marginBottom: 10, fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 20 }}>ℹ️</span>
+        Auto-Filled Vacation Weeks
+      </h2>
+      <div style={{ 
+        background: "#e3f2fd", 
+        border: "1px solid #90caf9", 
+        borderRadius: 6, 
+        padding: 12,
+        marginBottom: 12,
+      }}>
+        <p style={{ margin: 0, fontSize: 13, color: "#1565c0", lineHeight: 1.4 }}>
+          The following vacation weeks were automatically added to meet the 4-week minimum requirement. 
+          These weeks were chosen to optimize scheduling for other fellows. To use different vacation weeks, 
+          edit the vacation schedule and run the scheduler again.
+        </p>
+      </div>
+      <table style={{ borderCollapse: "collapse", width: "100%", background: "#fff" }}>
+        <thead>
+          <tr>
+            <th style={tableHeaderStyle}>Fellow</th>
+            <th style={tableHeaderStyle}>Weeks Added</th>
+            <th style={tableHeaderStyle}>Dates</th>
+          </tr>
+        </thead>
+        <tbody>
+          {vacationChanges.map((change, index) => (
+            <tr key={`${change.fellow}-${index}`}>
+              <td style={tableCellStyle}><strong>{change.fellow}</strong></td>
+              <td style={tableCellStyle}>{change.weeks_added}</td>
+              <td style={{ ...tableCellStyle, fontSize: 12, color: "#555" }}>
+                {change.dates_added?.slice(0, 5).join(", ")}
+                {change.dates_added?.length > 5 && `... and ${change.dates_added.length - 5} more`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function ValidationPanel({ checks }) {
   if (!checks?.length) return null;
   const allOk = checks.every((check) => check.ok);

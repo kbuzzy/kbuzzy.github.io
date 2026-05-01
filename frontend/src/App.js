@@ -25,6 +25,7 @@ import {
   RotationTable,
   RulesValidationTab,
   ValidationPanel,
+  VacationChangesPanel,
 } from "./components/ResultSections";
 import { useScheduler } from "./hooks/useScheduler";
 import { btnStyle, inputStyle, labelStyle } from "./styles/ui";
@@ -99,6 +100,7 @@ export default function App() {
     validScheduleTarget,
     validGeneratedVersions,
     vacations,
+    vacationChanges,
     setValidScheduleTarget,
   } = useScheduler();
 
@@ -543,6 +545,12 @@ export default function App() {
               <CollapsibleSection title="In-House Call Totals" summary={inHouseCountSummary} defaultOpen={false}>
                 <InHouseCallSummary roster={roster} schedule={schedule} exceptionMonths={pcicuExceptionMonths} majorHolidayBlocks={majorHolidayBlocks} />
               </CollapsibleSection>
+
+              {vacationChanges?.length > 0 && (
+                <CollapsibleSection title="Auto-Filled Vacation Weeks" summary={`${vacationChanges.length} fellows`} defaultOpen={true}>
+                  <VacationChangesPanel vacationChanges={vacationChanges} />
+                </CollapsibleSection>
+              )}
 
               <CollapsibleSection title="Request Summary" summary={`${Array.isArray(requestSummary) ? requestSummary.length : 0} fellows`} defaultOpen={false}>
                 <RequestSummaryPanel summary={requestSummary} />
