@@ -181,16 +181,28 @@ function vacationDateCountsByFellow(vacationsById) {
   return counts;
 }
 
-function replaceOverlappingVacationWeeks({ vacationsById, start, end, majorHolidayBlocks }) {
+function replaceOverlappingVacationWeeks({ vacationsById, roster, start, end, majorHolidayBlocks }) {
   let nextVacations = vacationsById;
   const replacements = [];
+
+  const pgyOrder = { "PGY-4": 1, "PGY-5": 2, "PGY-6": 3 };
 
   for (let iteration = 0; iteration < 20; iteration += 1) {
     const conflict = Object.entries(vacationDateCountsByFellow(nextVacations))
       .find(([, entries]) => entries.length > 2);
     if (!conflict) break;
     const [date, entries] = conflict;
-    const replacementTarget = entries[entries.length - 1];
+
+    // Identify all fellows involved in the conflict and sort by PGY level
+    const conflictedFellows = entries.map((entry) => {
+      const fellow = roster.find((f) => f.id === entry.fellowId);
+      return { ...entry, pgy: fellow?.pgy || "PGY-4" };
+    });
+
+    conflictedFellows.sort((a, b) => pgyOrder[a.pgy] - pgyOrder[b.pgy]);
+
+    // Choose the most junior fellow to move
+    const replacementTarget = conflictedFellows[0];
     const replacement = findAlternativeVacationWeek(replacementTarget.fellowId, nextVacations, start, end, majorHolidayBlocks);
     if (!replacement) break;
     const prior = nextVacations?.[replacementTarget.fellowId]?.[replacementTarget.rangeIndex];
@@ -491,6 +503,7 @@ export function useScheduler() {
 
     let activeVacationsById = replaceOverlappingVacationWeeks({
       vacationsById,
+      roster,
       start,
       end,
       majorHolidayBlocks,

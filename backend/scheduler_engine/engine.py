@@ -41,6 +41,8 @@ def generate_schedule(
 ) -> dict:
     del holidays
 
+    soft_terms = []
+
     major_holidays, conference_windows, exception_tuesday_months, normalized_holiday_preferences = validate_schedule_inputs(
         fellows,
         start_date,
