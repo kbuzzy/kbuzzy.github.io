@@ -133,6 +133,114 @@ def expand_iso_or_display_range(start: str, end: str) -> list[datetime]:
     return dates
 
 
+def count_vacation_weeks(dates: list[datetime]) -> int:
+    """
+    Count the number of distinct calendar weeks covered by vacation dates.
+    A week is defined as Monday-Sunday (ISO week).
+    """
+    if not dates:
+        return 0
+    
+    # Get unique weeks by converting each date to its ISO calendar week
+    weeks = set()
+    for date in dates:
+        # Get the ISO year and week number (week starts on Monday)
+        iso_year, iso_week, _ = date.isocalendar()
+        weeks.add((iso_year, iso_week))
+    
+    return len(weeks)
+
+
+def get_vacation_weeks_coverage(dates: list[datetime]) -> set[tuple[int, int]]:
+    """
+    Return the set of calendar weeks (ISO year, ISO week) covered by vacation dates.
+    """
+    weeks = set()
+    for date in dates:
+        iso_year, iso_week, _ = date.isocalendar()
+        weeks.add((iso_year, iso_week))
+    return weeks
+
+
+def get_all_available_weeks(start: datetime, end: datetime) -> list[tuple[datetime, tuple[int, int]]]:
+    """
+    Return all calendar weeks within the date range as list of (week_start_date, (iso_year, iso_week)).
+    Week start is defined as the Monday of each ISO week.
+    """
+    weeks = []
+    current = start
+    
+    # Move to the Monday of the first week that contains start
+    days_since_monday = current.weekday()  # 0 = Monday, 6 = Sunday
+    if days_since_monday > 0:
+        current = current - timedelta(days=days_since_monday)
+    
+    while current <= end:
+        iso_year, iso_week, _ = current.isocalendar()
+        weeks.append((current, (iso_year, iso_week)))
+        current += timedelta(weeks=1)
+    
+    return weeks
+
+
+def fill_vacation_weeks(vacations: dict[str, list[datetime]], start: datetime, end: datetime, fellows: list[str]) -> dict[str, list[datetime]]:
+    """
+    Ensure each fellow has at least 4 weeks of requested vacation.
+    For fellows with less than 4 weeks, automatically add vacation weeks
+    that optimize other fellows' scheduling (weeks without other fellows' vacations).
+    
+    Returns an updated vacations dict with auto-added weeks.
+    """
+    filled_vacations = {fellow: list(dates) for fellow, dates in vacations.items()}
+    
+    # For fellows not in vacations dict, initialize empty list
+    for fellow in fellows:
+        if fellow not in filled_vacations:
+            filled_vacations[fellow] = []
+    
+    # Get all available weeks in the schedule period
+    all_weeks = get_all_available_weeks(start, end)
+    
+    # Process each fellow
+    for fellow in fellows:
+        current_weeks = count_vacation_weeks(filled_vacations[fellow])
+        
+        if current_weeks < 4:
+            # Need to add (4 - current_weeks) more weeks
+            weeks_needed = 4 - current_weeks
+            current_vacation_weeks = get_vacation_weeks_coverage(filled_vacations[fellow])
+            
+            # Get weeks that no other fellow has vacation in (for optimization)
+            all_other_vacations_weeks = set()
+            for other_fellow in fellows:
+                if other_fellow != fellow:
+                    other_weeks = get_vacation_weeks_coverage(filled_vacations[other_fellow])
+                    all_other_vacations_weeks.update(other_weeks)
+            
+            # Find available weeks to add: not already in this fellow's vacation and not in other fellows' vacations
+            available_weeks_for_fellow = []
+            for week_start, week_iso in all_weeks:
+                if week_iso not in current_vacation_weeks and week_iso not in all_other_vacations_weeks:
+                    available_weeks_for_fellow.append(week_start)
+            
+            # Add weeks to meet the 4-week minimum
+            weeks_added = 0
+            for week_start in available_weeks_for_fellow:
+                if weeks_added >= weeks_needed:
+                    break
+                
+                # Add all days of this week (Monday-Friday, workdays)
+                for day_offset in range(5):  # Monday to Friday
+                    vacation_date = week_start + timedelta(days=day_offset)
+                    # Make sure the date is within the schedule period
+                    if start <= vacation_date <= end:
+                        filled_vacations[fellow].append(vacation_date)
+                
+                weeks_added += 1
+    
+    return filled_vacations
+
+
 def build_infeasibility_hints(req: ScheduleRequest, start: datetime, end: datetime) -> list[str]:
     hints: list[str] = []
     vacations = parse_date_map(req.vacations)
@@ -273,6 +381,9 @@ def create_schedule(req: ScheduleRequest) -> dict:
             status_code=400,
             detail="pcicu_exception_months must not contain duplicates",
         )
+
+    # Auto-fill vacation weeks to ensure each fellow has at least 4 weeks of vacation
+    vacations = fill_vacation_weeks(vacations, start, end, req.fellows)
 
     try:
         result = generate_schedule(
