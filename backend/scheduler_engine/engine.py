@@ -56,7 +56,7 @@ def generate_schedule(
         thanksgiving_a_start_date = parse_iso("2026-11-25") # From year_config.py
         thanksgiving_a_start_idx = idx(thanksgiving_a_start_date, start_date)
         # Penalize if Kilian is NOT on call for Thanksgiving A
-        soft_terms.append(THANKSGIVING_KILIAN_PRIORITY_WEIGHT * (1 - call[(kilian_fellow_idx, thanksgiving_a_start_idx)]))
+        soft_terms.append(BB_WEIGHT_MODIFIER * (1 - call[(kilian_fellow_idx, thanksgiving_a_start_idx)]))
 
 
     major_holidays, conference_windows, exception_tuesday_months, normalized_holiday_preferences = validate_schedule_inputs(
