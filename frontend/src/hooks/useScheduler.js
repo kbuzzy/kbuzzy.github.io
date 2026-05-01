@@ -729,6 +729,7 @@ export function useScheduler() {
     successMessage,
     failureMessage,
     runId,
+    vacationFallbacks, // New parameter
   ) => {
     const nextRequestSummary = buildSummaryForSolvedRun({
       start,
@@ -1124,4 +1125,11 @@ export function useScheduler() {
     vacationChanges,
     setValidScheduleTarget,
   };
+}
+};
+}
+Target,
+  };
+}
+ };
 }
